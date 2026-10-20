@@ -67,6 +67,18 @@ GUI:
     parser.add_argument('--audio', action='store_true', help='Pouzit audio->MIDI misto video detekce')
     parser.add_argument('--method', choices=['auto', 'basic-pitch', 'librosa'], default='auto',
                         help='Metoda audio detekce (s --audio): auto, basic-pitch, librosa')
+    parser.add_argument('--mode', choices=['auto', 'synthesia', 'real_piano', 'tutorial', 'generic'],
+                        default='auto', help='Typ videa: auto, synthesia, real_piano, tutorial, generic')
+    parser.add_argument('--isolate-piano', action='store_true',
+                        help='Izolovat piano z audio mixu (vyzaduje demucs/spleeter)')
+    parser.add_argument('--remove-vocals', action='store_true',
+                        help='Odstranit vocals pred detekci')
+    parser.add_argument('--instrument', type=str, default=None,
+                        help='Cilovy nastroj pro audio detekci (piano, guitar, vocals, atd.)')
+    parser.add_argument('--detect-instrument', action='store_true',
+                        help='Auto-detekovat dominantni nastroj v audiu')
+    parser.add_argument('--separate-stems', action='store_true',
+                        help='Separovat audio na stopy (vocals/drums/bass/other)')
     parser.add_argument('--verbose', '-v', action='store_true', help='Detailni logovani')
     
     args = parser.parse_args()
@@ -143,20 +155,53 @@ GUI:
         # Audio -> MIDI cesta
         print_step(3, "Extrakce audia a detekce not (audio)")
         
-        from audio_to_midi import extract_audio_from_video, audio_file_to_midi
+        from audio_to_midi import (extract_audio_from_video, audio_file_to_midi,
+                                     video_to_midi, separate_stems)
         
+        # Stem separation (volitelne)
+        if args.separate_stems:
+            print("  Separuji audio na stopy...")
+            audio_path = os.path.join(output_dir, f"{safe_title}.wav")
+            audio_result = extract_audio_from_video(video_path, audio_path)
+            if audio_result:
+                stems_dir = os.path.join(output_dir, 'stems')
+                stems = separate_stems(audio_result, stems_dir)
+                print(f"  Separovano {len(stems)} stopy:")
+                for name, path in stems.items():
+                    print(f"    {name}: {path}")
+            else:
+                print("  Extrakce audia selhala, preskakuji stem separation")
+        
+        # Detekce nastroje (volitelne)
+        detected_inst = None
+        if args.detect_instrument:
+            from audio_to_midi import detect_dominant_instrument
+            audio_path = os.path.join(output_dir, f"{safe_title}.wav")
+            audio_result = extract_audio_from_video(video_path, audio_path)
+            if audio_result:
+                detected_inst = detect_dominant_instrument(audio_result)
+                print(f"  Detekovan nastroj: {detected_inst}")
+        
+        # Hlavni audio→MIDI pipeline
         audio_path = os.path.join(output_dir, f"{safe_title}.wav")
-        audio_result = extract_audio_from_video(video_path, audio_path)
+        midi_out = os.path.join(output_dir, f"{safe_title}.mid")
         
-        if audio_result:
-            midi_temp = os.path.join(output_dir, f"{safe_title}_audio.mid")
-            notes = audio_file_to_midi(audio_result, midi_temp, tempo=args.tempo, method=args.method)
-            if not notes:
-                print("  Audio detekce nenasla zadne noty.")
-        else:
-            print("  Extrakce audia selhala.")
-            print("  Tip: Nainstaluj ffmpeg nebo pouzij video detekci (bez --audio)")
-            sys.exit(1)
+        result = video_to_midi(
+            video_path, midi_out,
+            output_dir=output_dir,
+            tempo=args.tempo,
+            method=args.method,
+            isolate_piano=args.isolate_piano,
+            remove_vocals=args.remove_vocals,
+            instrument=args.instrument,
+            detect_instrument=args.detect_instrument
+        )
+        
+        notes = result.get('notes', [])
+        if not notes:
+            print("  Audio detekce nenasla zadne noty.")
+        if result.get('detected_instrument'):
+            print(f"  Detekovany nastroj: {result['detected_instrument']}")
     
     if not notes:
         # Fallback: video detekce (pokud audio selhalo nebo nebylo zadano)
@@ -169,6 +214,7 @@ GUI:
             frame_skip=args.frame_skip,
             min_note_pixels=args.min_pixels,
             min_note_duration=args.min_duration,
+            video_mode=args.mode,
         )
         
         def progress(pct, msg):

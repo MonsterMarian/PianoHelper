@@ -1,9 +1,15 @@
 """
-note_detector.py - Adaptivni detekce padajicich not ze Synthesia-style videa.
+note_detector.py - Adaptivni detekce not z videa.
+
+Podporovane styly videa:
+- SYNTHESIA: Padajici barevne noty (falling bars) — vychozi
+- REAL_PIANO: Realne piano video (detekce stisku klaves z jasu)
+- TUTORIAL: Tutorial styl (noty nahoře, klavesnice dole)
+- GENERIC: Obecne barevne objekty nad klavesnici
 
 Dvoufazovy pristup:
-1. Detekce klavesnice - najde bile/cerne klavesy a jejich pozice (multi-frame consensus)
-2. Detekce not nad klavesnici - sleduje pohyb barevnych objektu
+1. Detekce klavesnice — multi-frame consensus, adaptivni thresholdy
+2. Detekce not — sleduje pohyb barevnych objektu / stisky klaves
 
 V2 improvements:
 - Multi-frame consensus pro klavesnici (odolnejsi proti sumu)
@@ -11,11 +17,13 @@ V2 improvements:
 - Velocity z velikosti noty (vetsi = hlasitejsi)
 - Lepsi HSV filtrace s adaptivnim saturation/value
 - Podpora vice stylu (falling bars, glow notes)
+- Auto-detekce stylu videa
 """
 import cv2
 import numpy as np
 from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict
+from enum import Enum
 import os
 
 
@@ -98,9 +106,21 @@ class DetectorConfig:
     keyboard_samples: int = 8              # Pocet vzorku pro consensus
     velocity_from_size: bool = True        # Velocity z velikosti noty
     glow_note_support: bool = True         # Detekce "glow" stylu not
+    
+    # Video mode
+    video_mode: str = 'auto'               # 'auto', 'synthesia', 'real_piano', 'tutorial', 'generic'
 
 
 NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
+
+
+class VideoMode(Enum):
+    """Typ videa pro ruzne detekcni strategie."""
+    SYNTHESIA = 'synthesia'       # Padajici barevne noty (falling bars)
+    REAL_PIANO = 'real_piano'     # Realne piano, detekce stisku klaves
+    TUTORIAL = 'tutorial'         # Noty nahoře, klavesnice dole (PianoGen apod.)
+    GENERIC = 'generic'           # Obecne barevne objekty nad klavesnici
+
 
 # Pattern klaves v oktave (od C): W=white, B=black
 OCTAVE_PATTERN = [
@@ -555,6 +575,312 @@ def _detect_glow_notes(hsv: np.ndarray, base_val_thresh: int) -> np.ndarray:
     return glow_mask
 
 
+# ── Video mode auto-detection ────────────────────────────────────────────────
+
+def detect_video_mode(video_path: str, config: DetectorConfig) -> VideoMode:
+    """
+    Automaticky detekuje typ videa na zaklade analyzy nekolika snimku.
+
+    Strategie:
+    - SYNTHESIA: Cerna/tmave pozadi + vysoce saturovane barevne objekty padajici shora
+    - REAL_PIANO: Prirozene barvy, ruce na klavesnici, zadne padajici noty
+    - TUTORIAL: Noty (text/bar) v horni casti + klavesnice v dolni casti
+    - GENERIC: Barevne objekty nad klavesnici, ale ne Synthesia styl
+
+    Returns:
+        Detekovany VideoMode
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return VideoMode.SYNTHESIA  # Fallback
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    sample_positions = np.linspace(0, total_frames - 1, min(5, total_frames)).astype(int)
+
+    synth_score = 0
+    real_score = 0
+    tutorial_score = 0
+
+    for frame_idx in sample_positions:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_idx))
+        ret, frame = cap.read()
+        if not ret:
+            continue
+
+        h, w = frame.shape[:2]
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+        # Analyza hornej poloviny (kde by byly noty)
+        top_half = hsv[:h // 2, :]
+        bottom_half = hsv[h // 2:, :]
+
+        # 1. SYNTHESIA signal: tmave pozadi + vysoce saturovane barevne bloky
+        dark_bg = np.mean(bottom_half[:, :, 2]) < 80  # Tmave pozadi
+        high_sat_pixels = np.sum(top_half[:, :, 1] > 150) / (h * w / 4)
+        if dark_bg and high_sat_pixels > 0.05:
+            synth_score += 2
+
+        # 2. REAL_PIANO signal: prirozene barvy, ruznorody jas, zadne barevne bloky
+        mean_sat = np.mean(hsv[:, :, 1])
+        mean_val = np.mean(hsv[:, :, 2])
+        if 30 < mean_sat < 100 and 80 < mean_val < 200:
+            real_score += 1
+
+        # 3. TUTORIAL signal: text/noty v hornej casti + klavesnice v dolni
+        # Hledame horizontalni struktury (notove linky, text) v hornej casti
+        top_gray = cv2.cvtColor(frame[:h // 3, :], cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(top_gray, 50, 150)
+        h_proj = np.sum(edges, axis=1)
+        if np.max(h_proj) > w * 0.3:  # Silne horizontalni struktury
+            tutorial_score += 2
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    cap.release()
+
+    # Vyhodnoceni
+    scores = {
+        VideoMode.SYNTHESIA: synth_score,
+        VideoMode.REAL_PIANO: real_score,
+        VideoMode.TUTORIAL: tutorial_score,
+    }
+
+    best_mode = max(scores, key=scores.get)
+    best_score = scores[best_mode]
+
+    if best_score == 0:
+        return VideoMode.GENERIC
+
+    return best_mode
+
+
+# ── Real piano detection ─────────────────────────────────────────────────────
+
+def detect_real_piano_notes(
+    video_path: str,
+    config: DetectorConfig,
+    progress_callback=None
+) -> List[DetectedNote]:
+    """
+    Detekce not z realneho piano videa.
+
+    Strategie: Sleduje zmeny jasu na klavesach pri stisku.
+    Klavesa je "stisknuta" kdyz se jeji jas vyrazne zmeni (ztmavne/zesvetli).
+
+    Args:
+        video_path: Cesta k videu
+        config: Konfigurace
+        progress_callback: Progress callback
+
+    Returns:
+        Seznam DetectedNote
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise RuntimeError(f"Nelze otevrit video: {video_path}")
+
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+    print(f"  Video: {width}x{height}, {fps:.1f} FPS, {total_frames} snimku")
+    print(f"  Mode: REAL_PIANO (detekce stisku klaves)")
+
+    # Faze 1: Detekce klavesnice
+    print("  Faze 1: Detekce klavesnice...")
+    keyboard = None
+    sample_frames = np.linspace(0, total_frames - 1, min(10, total_frames)).astype(int)
+
+    for frame_idx in sample_frames:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_idx))
+        ret, frame = cap.read()
+        if not ret:
+            continue
+        kb = detect_keyboard(frame, config)
+        if kb is not None and len(kb.keys) > 5:
+            keyboard = kb
+            print(f"    Nalezeno {len(kb.keys)} klaves")
+            break
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+    if keyboard is None:
+        print("    Klavesnice nedetekovana, pouzivam vychozi rozlozeni")
+        keyboard = create_default_keyboard(width, height, config)
+
+    # Faze 2: Sledovani jasu klaves
+    print("  Faze 2: Detekce stisku klaves (zmeny jasu)...")
+
+    # Vytvorit referencni obrazek klavesnice (prumer z nekolika snimku)
+    reference_gray = None
+    ref_count = 0
+    for frame_idx in sample_frames[:3]:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_idx))
+        ret, frame = cap.read()
+        if not ret:
+            continue
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        if reference_gray is None:
+            reference_gray = gray.astype(np.float32)
+        else:
+            reference_gray += gray.astype(np.float32)
+        ref_count += 1
+
+    if ref_count > 0:
+        reference_gray /= ref_count
+        reference_gray = reference_gray.astype(np.uint8)
+
+    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+
+    # Sledovani kazde klavesy
+    key_states = {}  # midi_note -> {'active': bool, 'start_frame': int, 'brightness_change': float}
+    all_notes = []
+    frame_idx = 0
+    processed = 0
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+
+        if frame_idx % config.frame_skip == 0 and reference_gray is not None:
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            time_s = frame_idx / fps
+
+            # Rozdil oproti referenci
+            diff = cv2.absdiff(gray, reference_gray)
+
+            detected_midi = set()
+
+            for key in keyboard.keys:
+                # Oblast klavesy
+                y_top = keyboard.keyboard_top
+                y_bot = keyboard.keyboard_bottom
+                x_left = key.x_left
+                x_right = key.x_right
+
+                if x_right <= x_left or y_bot <= y_top:
+                    continue
+
+                # Prumerna zmena jasu v oblasti klavesy
+                roi_diff = diff[y_top:y_bot, x_left:x_right]
+                mean_diff = np.mean(roi_diff)
+
+                # Threshold pro detekci stisku
+                press_threshold = 25  # Vyrazna zmena jasu
+
+                if mean_diff > press_threshold:
+                    detected_midi.add(key.midi_note)
+
+                    if key.midi_note not in key_states or not key_states[key.midi_note]['active']:
+                        key_states[key.midi_note] = {
+                            'active': True,
+                            'start_frame': frame_idx,
+                            'max_diff': mean_diff
+                        }
+                    else:
+                        key_states[key.midi_note]['max_diff'] = max(
+                            key_states[key.midi_note]['max_diff'], mean_diff
+                        )
+
+            # Ukoncit neaktivni noty
+            to_remove = []
+            for midi_note, state in key_states.items():
+                if state['active'] and midi_note not in detected_midi:
+                    end_frame = frame_idx
+                    start_time = state['start_frame'] / fps
+                    end_time = end_frame / fps
+
+                    if end_time - start_time >= config.min_note_duration:
+                        # Velocity z intenzity zmeny
+                        velocity = int(min(127, max(40, state['max_diff'] * 3)))
+                        all_notes.append(DetectedNote(
+                            midi_note=midi_note,
+                            start_time=start_time,
+                            end_time=end_time,
+                            velocity=velocity,
+                            confidence=min(1.0, state['max_diff'] / 50)
+                        ))
+                    to_remove.append(midi_note)
+
+            for midi_note in to_remove:
+                key_states[midi_note]['active'] = False
+
+            processed += 1
+            if progress_callback and processed % 50 == 0:
+                pct = (frame_idx / total_frames) * 100
+                progress_callback(pct, f"Snimek {frame_idx}/{total_frames}, {len(all_notes)} not")
+
+        frame_idx += 1
+
+    # Dokoncit zbyvajici aktivni noty
+    for midi_note, state in key_states.items():
+        if state['active']:
+            start_time = state['start_frame'] / fps
+            end_time = total_frames / fps
+            if end_time - start_time >= config.min_note_duration:
+                velocity = int(min(127, max(40, state['max_diff'] * 3)))
+                all_notes.append(DetectedNote(
+                    midi_note=midi_note,
+                    start_time=start_time,
+                    end_time=end_time,
+                    velocity=velocity,
+                    confidence=min(1.0, state['max_diff'] / 50)
+                ))
+
+    cap.release()
+
+    all_notes.sort(key=lambda n: n.start_time)
+    all_notes = merge_close_notes(all_notes, config.merge_gap)
+
+    print(f"  Celkem detekovano: {len(all_notes)} not (real piano)")
+    return all_notes
+
+
+# ── Tutorial-style detection ─────────────────────────────────────────────────
+
+def detect_tutorial_notes(
+    video_path: str,
+    config: DetectorConfig,
+    progress_callback=None
+) -> List[DetectedNote]:
+    """
+    Detekce not z tutorial-style videi (PianoGen, atd.).
+
+    Typicky: noty/text v hornej casti obrazovky, klavesnice v dolni casti.
+    Noty mohou byt barevne bloky, text, nebo notace na staff.
+
+    Strategie: Detekce barevnych bloku v hornej casti + mapovani na klavesy.
+
+    Args:
+        video_path: Cesta k videu
+        config: Konfigurace
+        progress_callback: Progress callback
+
+    Returns:
+        Seznam DetectedNote
+    """
+    # Tutorial styl je podobny Synthesia, ale noty jsou v hornej casti
+    # Muzeme pouzit standardni detekci s upravenym zone
+    modified_config = DetectorConfig(
+        frame_skip=config.frame_skip,
+        min_note_pixels=config.min_note_pixels,
+        min_note_duration=config.min_note_duration,
+        keyboard_zone_top=0.65,   # Klavesnice muze byt nize
+        keyboard_zone_bottom=0.95,
+        adaptive_thresholds=config.adaptive_thresholds,
+        multi_sample_keyboard=config.multi_sample_keyboard,
+        velocity_from_size=config.velocity_from_size,
+        glow_note_support=config.glow_note_support,
+    )
+
+    print("  Mode: TUTORIAL (noty v hornej casti, klavesnice dole)")
+
+    # Pouzijeme standardni pipeline s upravenym config
+    return detect_notes_from_video(video_path, config=modified_config,
+                                    progress_callback=progress_callback)
+
+
 def detect_notes_from_video(
     video_path: str,
     config: Optional[DetectorConfig] = None,
@@ -563,9 +889,11 @@ def detect_notes_from_video(
     """
     Hlavni funkce: analyzuje video a vrati seznam detekovanych not.
     
-    Dvoufazovy pristup:
-    1. Detekce klavesnice (multi-frame consensus)
-    2. Detekce not nad klavesnici (cele video)
+    Automaticky detekuje typ videa a pouzije odpovidajici strategii:
+    - SYNTHESIA: Padajici barevne noty (falling bars) — vychozi
+    - REAL_PIANO: Realne piano video (detekce stisku klaves z jasu)
+    - TUTORIAL: Tutorial styl (noty nahoře, klavesnice dole)
+    - GENERIC: Obecne barevne objekty nad klavesnici
     
     Args:
         video_path: Cesta k video souboru
@@ -577,6 +905,23 @@ def detect_notes_from_video(
     """
     if config is None:
         config = DetectorConfig()
+    
+    # Auto-detect video mode
+    mode = config.video_mode
+    if mode == 'auto':
+        print("  Detekuji typ videa...")
+        detected_mode = detect_video_mode(video_path, config)
+        print(f"  Detekovan mode: {detected_mode.value}")
+        mode = detected_mode.value
+    else:
+        print(f"  Mode: {mode} (manualni)")
+    
+    # Dispatch podle mode
+    if mode == 'real_piano':
+        return detect_real_piano_notes(video_path, config, progress_callback)
+    elif mode == 'tutorial':
+        return detect_tutorial_notes(video_path, config, progress_callback)
+    # synthesia / generic — pouzij standardni pipeline
     
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():

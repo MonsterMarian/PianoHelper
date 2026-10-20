@@ -145,6 +145,22 @@ with st.sidebar:
     )
 
     st.markdown("---")
+    st.markdown("### 🎹 Video Mode")
+    video_mode = st.selectbox(
+        "Detection mode",
+        options=["auto", "synthesia", "real_piano", "tutorial", "generic"],
+        help="auto = detect from video; real_piano = brightness change tracking; tutorial = notes on top"
+    )
+
+    st.markdown("---")
+    st.markdown("### 🎵 Audio Processing")
+    use_audio = st.checkbox("Use audio→MIDI", value=False, help="Extract audio and use pitch detection instead of video")
+    isolate_piano = st.checkbox("Isolate piano", value=False, help="Separate piano from mixed audio (needs demucs/spleeter)")
+    remove_vocals = st.checkbox("Remove vocals", value=False, help="Remove singing voice before detection")
+    detect_instrument = st.checkbox("Detect instrument", value=False, help="Auto-detect dominant instrument in audio")
+    separate_stems = st.checkbox("Separate stems", value=False, help="Split audio into vocals/drums/bass/other tracks")
+
+    st.markdown("---")
     st.markdown("### 📂 Output")
     st.text(f"→ {st.session_state.output_dir}")
 
@@ -270,23 +286,68 @@ if process_btn and st.session_state.video_info is not None:
         # ── Step 3: Detect notes ─────────────────────────────────────────────
         progress_bar.progress(25, text="Step 3/5 — Detecting notes (this may take a while)…")
 
-        config = mods["DetectorConfig"](
-            frame_skip=frame_skip,
-            min_note_pixels=min_pixels,
-            min_note_duration=min_note_duration,
-        )
+        notes = []
 
-        def _progress(pct, msg):
-            scaled = 25 + int(pct * 0.55)          # 25 → 80
-            progress_bar.progress(min(scaled, 80), text=f"Detecting… {pct:.0f}%  —  {msg}")
+        if use_audio:
+            # Audio→MIDI path
+            with status_container.container():
+                st.info("🎵 Using audio→MIDI pipeline…")
 
-        notes = mods["detect_notes_from_video"](video_path, config=config, progress_callback=_progress)
+            from audio_to_midi import video_to_midi, extract_audio_from_video, separate_stems
 
-        if not notes:
-            raise RuntimeError(
-                "No notes detected. The video may not be Synthesia-style, "
-                "or try lowering Min Pixels / Frame Skip."
+            midi_out = os.path.join(output_dir, f"{safe_title}.mid")
+
+            result = video_to_midi(
+                video_path, midi_out,
+                output_dir=output_dir,
+                tempo=tempo,
+                method='auto',
+                isolate_piano=isolate_piano,
+                remove_vocals=remove_vocals,
+                detect_instrument=detect_instrument,
             )
+
+            notes = result.get('notes', [])
+
+            if separate_stems:
+                audio_path = result.get('audio_path', '')
+                if audio_path and os.path.exists(audio_path):
+                    stems_dir = os.path.join(output_dir, 'stems')
+                    stems = separate_stems(audio_path, stems_dir)
+                    st.session_state['stems'] = stems
+
+            if result.get('detected_instrument'):
+                st.info(f"🎹 Detected instrument: **{result['detected_instrument']}**")
+
+            if not notes:
+                raise RuntimeError(
+                    "No notes detected from audio. Try:\n"
+                    "- Ensure the video has audio track\n"
+                    "- Install basic-pitch: `pip install basic-pitch`\n"
+                    "- Or switch to video detection (uncheck 'Use audio→MIDI')"
+                )
+        else:
+            # Video detection path
+            config = mods["DetectorConfig"](
+                frame_skip=frame_skip,
+                min_note_pixels=min_pixels,
+                min_note_duration=min_note_duration,
+                video_mode=video_mode,
+            )
+
+            def _progress(pct, msg):
+                scaled = 25 + int(pct * 0.55)          # 25 → 80
+                progress_bar.progress(min(scaled, 80), text=f"Detecting… {pct:.0f}%  —  {msg}")
+
+            notes = mods["detect_notes_from_video"](video_path, config=config, progress_callback=_progress)
+
+            if not notes:
+                raise RuntimeError(
+                    "No notes detected. Try:\n"
+                    "- Switch video mode (e.g. 'real_piano' for real piano videos)\n"
+                    "- Enable 'Use audio→MIDI' for videos with audio\n"
+                    "- Lower Min Pixels or Frame Skip"
+                )
 
         st.session_state.notes = notes
         st.session_state.stats = mods["get_note_statistics"](notes)
@@ -337,9 +398,14 @@ if st.session_state.notes is not None:
     m5.metric("Total Duration", f"{stats['total_duration']:.1f}s")
 
     # ── Result tabs ──────────────────────────────────────────────────────────
-    tab_preview, tab_notes, tab_midi, tab_sheet = st.tabs(
-        ["🖼️ Preview", "🎵 Notes", "🎶 MIDI", "🎼 Sheet Music"]
-    )
+    has_stems = st.session_state.get('stems') and len(st.session_state.get('stems', {})) > 0
+    tab_names = ["🖼️ Preview", "🎵 Notes", "🎶 MIDI", "🎼 Sheet Music"]
+    if has_stems:
+        tab_names.append("🎚️ Stems")
+
+    tabs = st.tabs(tab_names)
+    tab_preview, tab_notes, tab_midi, tab_sheet = tabs[:4]
+    tab_stems = tabs[4] if has_stems else None
 
     # — Preview tab —
     with tab_preview:
@@ -401,6 +467,28 @@ if st.session_state.notes is not None:
                 )
         else:
             st.warning("Sheet music image not available.")
+
+    # — Stems tab (only when stems were generated) —
+    if tab_stems:
+        with tab_stems:
+            st.markdown("#### 🎚️ Separated Audio Stems")
+            stems = st.session_state.get('stems', {})
+            for stem_name, stem_path in stems.items():
+                if os.path.exists(stem_path):
+                    col_name, col_audio, col_dl = st.columns([1, 3, 1])
+                    with col_name:
+                        icon = {"vocals": "🎤", "drums": "🥁", "bass": "🎸", "other": "🎹"}.get(stem_name, "🎵")
+                        st.markdown(f"{icon} **{stem_name.title()}**")
+                    with col_audio:
+                        st.audio(stem_path)
+                    with col_dl:
+                        with open(stem_path, "rb") as f:
+                            st.download_button(
+                                "⬇️",
+                                data=f.read(),
+                                file_name=os.path.basename(stem_path),
+                                key=f"stem_{stem_name}",
+                            )
 
     # ── Bulk download row ────────────────────────────────────────────────────
     st.markdown("---")
