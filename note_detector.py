@@ -18,6 +18,7 @@ V2 improvements:
 - Lepsi HSV filtrace s adaptivnim saturation/value
 - Podpora vice stylu (falling bars, glow notes)
 - Auto-detekce stylu videa
+- Artifact filter (odstraneni chyb detekce)
 """
 import cv2
 import numpy as np
@@ -25,6 +26,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Tuple, Dict
 from enum import Enum
 import os
+import math
 
 
 @dataclass
@@ -829,10 +831,11 @@ def detect_real_piano_notes(
                 ))
 
     cap.release()
-
+    
     all_notes.sort(key=lambda n: n.start_time)
     all_notes = merge_close_notes(all_notes, config.merge_gap)
-
+    all_notes = filter_artifacts(all_notes, max_simultaneous=10, min_artifact_duration=0.1)
+    
     print(f"  Celkem detekovano: {len(all_notes)} not (real piano)")
     return all_notes
 
@@ -872,6 +875,7 @@ def detect_tutorial_notes(
         multi_sample_keyboard=config.multi_sample_keyboard,
         velocity_from_size=config.velocity_from_size,
         glow_note_support=config.glow_note_support,
+        video_mode='synthesia',   # Zamezit rekurzivni auto-detekci
     )
 
     print("  Mode: TUTORIAL (noty v hornej casti, klavesnice dole)")
@@ -1020,10 +1024,11 @@ def detect_notes_from_video(
                             avg_conf = data['confidence_sum'] / data['frame_count']
                             
                             # Velocity z velikosti noty (vetsi = hlasitejsi)
+                            # Relativni sklaovani: normalizovat podle prumerne velikosti
                             if config.velocity_from_size:
                                 max_px = data['max_pixels']
-                                # Normalizovat: 25px ~ vel 50, 200px ~ vel 127
-                                velocity = int(min(127, max(40, 40 + max_px * 0.5)))
+                                # Logaritmicka skala: male noty (25px) ~ 50, stredni (100px) ~ 80, velke (300px) ~ 110
+                                velocity = int(min(127, max(40, 40 + 30 * math.log1p(max_px / 50))))
                             else:
                                 velocity = int(min(127, max(30, avg_conf * 127)))
                             
@@ -1057,7 +1062,8 @@ def detect_notes_from_video(
             
             if config.velocity_from_size:
                 max_px = data['max_pixels']
-                velocity = int(min(127, max(40, 40 + max_px * 0.5)))
+                # Logaritmicka skala: male noty (25px) ~ 50, stredni (100px) ~ 80, velke (300px) ~ 110
+                velocity = int(min(127, max(40, 40 + 30 * math.log1p(max_px / 50))))
             else:
                 velocity = int(min(127, max(30, avg_conf * 127)))
             
@@ -1074,6 +1080,7 @@ def detect_notes_from_video(
     
     all_notes.sort(key=lambda n: n.start_time)
     all_notes = merge_close_notes(all_notes, config.merge_gap)
+    all_notes = filter_artifacts(all_notes, max_simultaneous=6, min_artifact_duration=0.15)
     
     print(f"  Celkem detekovano: {len(all_notes)} not")
     return all_notes
@@ -1154,6 +1161,63 @@ def merge_close_notes(notes: List[DetectedNote], gap: float) -> List[DetectedNot
     
     merged.append(current)
     return merged
+
+
+def filter_artifacts(notes: List[DetectedNote], max_simultaneous: int = 8, min_artifact_duration: float = 0.2) -> List[DetectedNote]:
+    """
+    Odstrani artefakty z detekce.
+    
+    Artefakty jsou:
+    1. Prilis mnoho not najednou (>max_simultaneous) - pravdepodobne chyba detekce
+    2. Velmi kratke noty (<min_artifact_duration) v clusteru - pravdepodobne sum
+    
+    Args:
+        notes: Seznam not
+        max_simultaneous: Maximalni pocet not ktere mohou znit najednou
+        min_artifact_duration: Minimalni delka noty (kratsi jsou podezrele)
+    
+    Returns:
+        Filtrovany seznam not
+    """
+    if not notes:
+        return notes
+    
+    # Najit casove pointy kde je prilis mnoho not najednou
+    events = []
+    for idx, note in enumerate(notes):
+        events.append((note.start_time, 'start', idx))
+        events.append((note.end_time, 'end', idx))
+    
+    events.sort(key=lambda x: (x[0], 0 if x[1] == 'end' else 1))
+    
+    active_notes = set()  # Mnozina indexu aktivnich not
+    artifact_times = []  # Casove intervaly kde je artefakt
+    
+    for time, event_type, idx in events:
+        if event_type == 'start':
+            active_notes.add(idx)
+        else:
+            active_notes.discard(idx)
+        
+        if len(active_notes) > max_simultaneous:
+            artifact_times.append(time)
+    
+    # Filtrovat noty
+    filtered = []
+    for note in notes:
+        # Preskocit noty v artefaktovych intervalech
+        in_artifact = any(abs(note.start_time - t) < 1.0 for t in artifact_times)
+        
+        # Preskocit velmi kratke noty pokud jsou v clusteru
+        too_short = note.duration < min_artifact_duration and in_artifact
+        
+        if not in_artifact and not too_short:
+            filtered.append(note)
+    
+    if len(filtered) < len(notes):
+        print(f"  Artefaktovy filtr: {len(notes)} -> {len(filtered)} not ({len(notes)-len(filtered)} odstraneno)")
+    
+    return filtered
 
 
 def preview_frame(video_path: str, output_path: str, time_s: float = 5.0, 
