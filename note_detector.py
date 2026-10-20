@@ -2,10 +2,15 @@
 note_detector.py - Adaptivni detekce padajicich not ze Synthesia-style videa.
 
 Dvoufazovy pristup:
-1. Detekce klavesnice - najde bile/cerne klavesy a jejich pozice
+1. Detekce klavesnice - najde bile/cerne klavesy a jejich pozice (multi-frame consensus)
 2. Detekce not nad klavesnici - sleduje pohyb barevnych objektu
 
-Adaptivne se prizpusobi ruznym sirkam videa a rozsahum klavesnice.
+V2 improvements:
+- Multi-frame consensus pro klavesnici (odolnejsi proti sumu)
+- Adaptivni thresholdy (podle rozliseni a jasu videa)
+- Velocity z velikosti noty (vetsi = hlasitejsi)
+- Lepsi HSV filtrace s adaptivnim saturation/value
+- Podpora vice stylu (falling bars, glow notes)
 """
 import cv2
 import numpy as np
@@ -86,6 +91,13 @@ class DetectorConfig:
     # Barevna filtrace
     exclude_dark_notes: bool = True        # Ignorovat velmi tmave noty
     min_note_brightness: int = 120         # Minimalni jas pro notu (0-255)
+    
+    # V2: adaptivni detekce
+    adaptive_thresholds: bool = True       # Adaptivni thresholdy podle videa
+    multi_sample_keyboard: bool = True     # Multi-frame consensus pro klavesnici
+    keyboard_samples: int = 8              # Pocet vzorku pro consensus
+    velocity_from_size: bool = True        # Velocity z velikosti noty
+    glow_note_support: bool = True         # Detekce "glow" stylu not
 
 
 NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
@@ -107,9 +119,48 @@ OCTAVE_PATTERN = [
 ]
 
 
+def _adaptive_color_thresholds(frame: np.ndarray, config: DetectorConfig) -> Tuple[int, int]:
+    """
+    Vypocita adaptivni saturation/value thresholdy na zaklade barevne distribuce snimku.
+    
+    Misto fixnich hodnot (60/100) analyzuje HSV histogram a najde
+    optimalni hranici pro oddeleni barevnych not od pozadi.
+    """
+    h, w = frame.shape[:2]
+    
+    # Analyzovat horni polovinu obrazu (kde jsou noty, ne klavesnice)
+    roi = frame[:h // 2, :]
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    
+    # Saturation histogram
+    sat_hist = cv2.calcHist([hsv], [1], None, [256], [0, 256]).flatten()
+    val_hist = cv2.calcHist([hsv], [2], None, [256], [0, 256]).flatten()
+    
+    # Najit Otsu-like threshold pro saturation
+    # Pozadi ma vetsinou nizkou saturaci, noty vysokou
+    total_pixels = sat_hist.sum()
+    if total_pixels == 0:
+        return config.color_saturation_min, config.color_value_min
+    
+    cumulative = np.cumsum(sat_hist)
+    target = total_pixels * 0.70  # 70% pixelu je pozadi
+    sat_threshold = np.searchsorted(cumulative, target)
+    sat_threshold = int(np.clip(sat_threshold, 40, 150))
+    
+    # Value threshold - podobne
+    cumulative_v = np.cumsum(val_hist)
+    target_v = total_pixels * 0.60
+    val_threshold = np.searchsorted(cumulative_v, target_v)
+    val_threshold = int(np.clip(val_threshold, 80, 180))
+    
+    return sat_threshold, val_threshold
+
+
 def detect_keyboard(frame: np.ndarray, config: DetectorConfig) -> Optional[KeyboardLayout]:
     """
     Detekuje klavesnici v jednom snimku videa.
+    
+    V2: Vylepsena detekce s adaptivnimi thresholdy a vice pristupy.
     
     Strategie:
     1. Podivat se na spodni cast obrazu
@@ -131,20 +182,27 @@ def detect_keyboard(frame: np.ndarray, config: DetectorConfig) -> Optional[Keybo
     gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     
-    # Binarizace - bile klavesy jsou jasne
-    _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
+    # Adaptivni binarizace (Otsu misto fixniho thresholdu)
+    if config.adaptive_thresholds:
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
+        _, binary = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    else:
+        _, binary = cv2.threshold(gray, 180, 255, cv2.THRESH_BINARY)
     
     # Najit horizontalni projekci - kde je nejvic bilych pixelu
     h_proj = np.sum(binary, axis=1)
     
     # Klavesnice je v oblasti s vysokym poctem bilych pixelu
-    # Najit souvisly usek s vysokou hodnotou
-    threshold = w * 100  # Alespon ~40% sirky musi byt bile
+    threshold = w * 100
     keyboard_rows = np.where(h_proj > threshold)[0]
     
     if len(keyboard_rows) == 0:
-        # Zkusit nizsi threshold
         threshold = w * 50
+        keyboard_rows = np.where(h_proj > threshold)[0]
+    
+    if len(keyboard_rows) == 0:
+        # Treti pokus - jeste nizsi threshold
+        threshold = w * 30
         keyboard_rows = np.where(h_proj > threshold)[0]
     
     if len(keyboard_rows) == 0:
@@ -155,7 +213,6 @@ def detect_keyboard(frame: np.ndarray, config: DetectorConfig) -> Optional[Keybo
     gaps = np.where(diffs > 10)[0]
     
     if len(gaps) > 0:
-        # Vznejt nejvetsi souvisly blok
         start_idx = 0
         best_len = 0
         best_start = 0
@@ -167,7 +224,6 @@ def detect_keyboard(frame: np.ndarray, config: DetectorConfig) -> Optional[Keybo
                 best_start = start_idx
             start_idx = gap_idx + 1
         
-        # Posledni segment
         length = len(keyboard_rows) - start_idx
         if length > best_len:
             best_len = length
@@ -184,13 +240,14 @@ def detect_keyboard(frame: np.ndarray, config: DetectorConfig) -> Optional[Keybo
     kb_height = kb_bottom - kb_top
     
     # Analyzovat bile klavesy
-    # Bile klavesy jsou vertikalni bile sloupce
     v_proj = np.sum(binary[keyboard_rows[0]:keyboard_rows[-1], :], axis=0)
     
-    # Bile klavesy maji vysokou hodnotu, cerne nizkou
-    white_threshold = kb_height * 150  # ~60% maximalni hodnoty
+    # Adaptivni threshold pro bile klavesy
+    if config.adaptive_thresholds:
+        white_threshold = np.percentile(v_proj, 55)  # Median + trochu nahoru
+    else:
+        white_threshold = kb_height * 150
     
-    # Najit prechody bile/cerna
     is_white = v_proj > white_threshold
     
     # Segmentace - najit souvisle bile useky
@@ -198,102 +255,72 @@ def detect_keyboard(frame: np.ndarray, config: DetectorConfig) -> Optional[Keybo
     in_white = False
     seg_start = 0
     
+    # Minimalni sirka bile klavesy zavisla na rozliseni
+    min_white_width = max(5, w // 200)
+    
     for x in range(w):
         if is_white[x] and not in_white:
             seg_start = x
             in_white = True
         elif not is_white[x] and in_white:
-            if x - seg_start > 5:  # Minimalni sirka bile klavesy
+            if x - seg_start > min_white_width:
                 white_segments.append((seg_start, x))
             in_white = False
     
-    if in_white and w - seg_start > 5:
+    if in_white and w - seg_start > min_white_width:
         white_segments.append((seg_start, w))
     
     if len(white_segments) < 3:
         return None
     
-    # Spocitat prumernou sirku bile klavesy
+    # Spocitat prumernou sirku bile klavesy (median je odolnejsi proti odlehlym)
     white_widths = [end - start for start, end in white_segments]
-    avg_white_width = np.median(white_widths)
+    avg_white_width = float(np.median(white_widths))
     
     # Detekce cernych klaves
-    # Cerne klavesy jsou vyrazne tmave obdelniky mezi bilymi klavesami
-    # Musi byt SIRSI nez jen tenka cara (mezi klavesami) a ZAROVEN opravdu cerne
     black_segments = []
     for i in range(len(white_segments) - 1):
         gap_start = white_segments[i][1]
         gap_end = white_segments[i + 1][0]
         gap_width = gap_end - gap_start
         
-        # Cerna klavesa musi byt:
-        # 1. Siroke alespon 50% bile klavesy (cerna je ~60% sirky bile)
-        # 2. Ale ne sirsi nez 80% bile klavesy
-        # 3. Opravdu TMAVA (prumerna hodnota < 60)
-        # 4. Tenke cary (< 4px) ignorujeme - to jsou jen okraje
+        # Adaptivni thresholdy pro cernou klavesu
+        min_black_width = max(4, avg_white_width * 0.40)
+        max_black_width = avg_white_width * 0.85
         
-        if gap_width < max(4, avg_white_width * 0.50):
-            continue  # Prilis uzke - jen mezera/cara
-        if gap_width > avg_white_width * 0.80:
-            continue  # Prilis siroke - neni to cerna klavesa
+        if gap_width < min_black_width:
+            continue
+        if gap_width > max_black_width:
+            continue
         
         # Zkontrolovat ze je opravdu tmava
         gap_region = gray[keyboard_rows[0]:keyboard_rows[-1], gap_start:gap_end]
         gap_brightness = np.mean(gap_region)
-        gap_dark_ratio = np.sum(gap_region < 60) / gap_region.size
+        gap_dark_ratio = np.sum(gap_region < 60) / max(1, gap_region.size)
         
-        # Musi byt tmava z vice nez 80% plochy a prumer < 60
-        if gap_brightness < 60 and gap_dark_ratio > 0.8:
+        if gap_brightness < 70 and gap_dark_ratio > 0.7:
             black_segments.append((gap_start, gap_end, True))
     
     # Sestavit klavesy
     keys = []
-    
-    # Seznam vsech segmentu (bile + cerne) serazenych podle X
     all_segments = []
     for start, end in white_segments:
-        all_segments.append((start, end, False))  # is_black=False
+        all_segments.append((start, end, False))
     for start, end, is_black in black_segments:
         all_segments.append((start, end, True))
     
     all_segments.sort(key=lambda s: s[0])
     
     # Namapovat na MIDI noty
-    # Potrebujeme urcit pocatecni notu
-    # Predpokladame ze prvni bila klavesa je C (nebo A v nekterych videich)
-    # Zjistime to z poctu bilych klaves a poctu oktáv
-    
     num_white_keys = len(white_segments)
-    num_octaves = num_white_keys / 7.0  # 7 bilych klaves na oktávu
-    
-    # Urcit pocatecni MIDI
-    # Synthesia vetsinou zobrazuje C3-C6 nebo C2-C6
-    # Typicky pocet bilych klaves:
-    # - 21 klaves (3 oktavy) = C4-C6 nebo C3-C5
-    # - 28 klaves (4 oktavy) = C3-C6
-    # - 35 klaves (5 oktáv) = C3-C7 nebo C2-C6
-    # - 52 klaves = plne piano A0-C8
-    
-    # Urcit pocatecni MIDI a pattern podle poctu bilych klaves
-    # Pattern = MIDI offsety od start_midi pro kazdou bilou klavesu v oktave
-    #
-    # Piano layout (bile klavesy):
-    #   Od C:  C  D  E  F  G  A  B   -> offsety [0, 2, 4, 5, 7, 9, 11]
-    #   Od A:  A  B  C  D  E  F  G   -> offsety [0, 2, 3, 5, 7, 8, 10]
-    #
-    # Standardni rozsahy:
-    #   52 bilych = plne piano A0-C8 -> start A0 (MIDI 21), pattern od A
-    #   36 bilych = C3-C7            -> start C3 (MIDI 48), pattern od C
-    #   35 bilych = C2-C6            -> start C2 (MIDI 36), pattern od C
-    #   28 bilych = C3-C6            -> start C3 (MIDI 48), pattern od C
-    #   21 bilych = C4-C6            -> start C4 (MIDI 60), pattern od C
+    num_octaves = num_white_keys / 7.0
     
     if num_white_keys >= 50:
         start_midi = 21  # A0
-        white_pattern = [0, 2, 3, 5, 7, 8, 10]   # A B C D E F G (offsety od A0)
+        white_pattern = [0, 2, 3, 5, 7, 8, 10]
     elif num_white_keys >= 34:
         start_midi = 36  # C2
-        white_pattern = [0, 2, 4, 5, 7, 9, 11]   # C D E F G A B (offsety od C2)
+        white_pattern = [0, 2, 4, 5, 7, 9, 11]
     elif num_white_keys >= 27:
         start_midi = 48  # C3
         white_pattern = [0, 2, 4, 5, 7, 9, 11]
@@ -301,25 +328,17 @@ def detect_keyboard(frame: np.ndarray, config: DetectorConfig) -> Optional[Keybo
         start_midi = 60  # C4
         white_pattern = [0, 2, 4, 5, 7, 9, 11]
     else:
-        start_midi = 60  # C4
+        start_midi = 60
         white_pattern = [0, 2, 4, 5, 7, 9, 11]
     
-    # Priradit MIDI cisla
-    # Pattern v oktave: C W, C# B, D W, D# B, E W, F W, F# B, G W, G# B, A W, A# B, B W
-    # Pokud zaciname na C (bila), pattern je: W B W B W W B W B W B W
+    white_key_midi_pattern = white_pattern
     
-    white_key_midi_pattern = white_pattern  # Pouzit pattern z vyse
-    
-    # Mapovani klaves
-    current_midi = start_midi
     white_idx = 0
     
     for seg_start, seg_end, is_black in all_segments:
         x_center = (seg_start + seg_end) // 2
         
         if not is_black:
-            # Bila klavesa
-            # Urcit MIDI z pozice v oktave
             octave_offset = white_idx // 7
             note_in_octave = white_idx % 7
             midi = start_midi + octave_offset * 12 + white_key_midi_pattern[note_in_octave]
@@ -335,22 +354,12 @@ def detect_keyboard(frame: np.ndarray, config: DetectorConfig) -> Optional[Keybo
             ))
             white_idx += 1
         else:
-            # Cerna klavesa - najit nejblizsi bilou klavesu
-            # Cerna klavesa je mezi dvema bilymi
             prev_white = None
-            next_white = None
             for k in keys:
                 if not k.is_black and k.x_center < x_center:
                     prev_white = k
-            for seg_s, seg_e, is_b in all_segments:
-                if not is_b:
-                    wx = (seg_s + seg_e) // 2
-                    if wx > x_center:
-                        next_white = (seg_s, seg_e)
-                        break
             
             if prev_white is not None:
-                # Cerna klavesa je +1 od predchozi bile
                 midi = prev_white.midi_note + 1
                 note_name = NOTE_NAMES[midi % 12] + str((midi // 12) - 1)
                 keys.append(KeyInfo(
@@ -365,7 +374,6 @@ def detect_keyboard(frame: np.ndarray, config: DetectorConfig) -> Optional[Keybo
     if not keys:
         return None
     
-    # Seradit podle MIDI
     keys.sort(key=lambda k: k.midi_note)
     
     return KeyboardLayout(
@@ -378,21 +386,80 @@ def detect_keyboard(frame: np.ndarray, config: DetectorConfig) -> Optional[Keybo
     )
 
 
+def detect_keyboard_consensus(
+    cap: cv2.VideoCapture,
+    config: DetectorConfig,
+    num_samples: int = 8
+) -> Optional[KeyboardLayout]:
+    """
+    Multi-frame consensus detekce klavesnice.
+    
+    Odebere vice vzorku z ruznych casti videa a pouzije nejcastejsi
+    (consensus) rozlozeni. Odolnejsi proti sumu a prechodnym efektum.
+    
+    Args:
+        cap: OpenCV VideoCapture
+        config: Konfigurace detekce
+        num_samples: Pocet vzorku napric videem
+    
+    Returns:
+        Nejlepsi detekovane KeyboardLayout
+    """
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    
+    # Rozlozit vzorky rovnomerne napric videem
+    sample_positions = np.linspace(0, total_frames - 1, num_samples + 2)[1:-1].astype(int)
+    
+    candidates = []
+    for frame_idx in sample_positions:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(frame_idx))
+        ret, frame = cap.read()
+        if not ret:
+            continue
+        
+        kb = detect_keyboard(frame, config)
+        if kb is not None and len(kb.keys) > 5:
+            candidates.append(kb)
+    
+    if not candidates:
+        return None
+    
+    # Vybrat nejlepsi kandidata (nejvic klaves + nejvetsi konsenzus)
+    # Klavesy by mely byt konzistentni napric snimky
+    key_counts = [len(kb.keys) for kb in candidates]
+    
+    # Najit nejcastejsi pocet klaves
+    from collections import Counter
+    count_freq = Counter(key_counts)
+    most_common_count = count_freq.most_common(1)[0][0]
+    
+    # Filtrovat kandidaty s timto poctem klaves
+    matching = [kb for kb in candidates if len(kb.keys) == most_common_count]
+    
+    # Pouzit kandidata s nejvetsi klavesnici (nejpravdepodobneji spravny)
+    best = max(matching, key=lambda kb: kb.keyboard_bottom - kb.keyboard_top)
+    
+    return best
+
+
 def detect_notes_in_frame(
     frame: np.ndarray,
     config: DetectorConfig,
     keyboard: KeyboardLayout
-) -> List[Tuple[int, float, Tuple[int, int, int]]]:
+) -> List[Tuple[int, float, Tuple[int, int, int], int]]:
     """
     Detekuje aktivni noty nad klavesnici v jednom snimku.
     
+    V2: adaptivni thresholdy, velocity z velikosti noty, glow detekce.
+    
     Returns:
-        [(midi_note, confidence, avg_color_hsv), ...]
+        [(midi_note, confidence, avg_color_hsv, pixel_count), ...]
     """
     h, w = frame.shape[:2]
     
     # Detekcni zona je NAD klavesnici
-    y_zone_start = max(0, keyboard.keyboard_top - int(h * 0.6))
+    zone_height = int(h * 0.55)
+    y_zone_start = max(0, keyboard.keyboard_top - zone_height)
     y_zone_end = keyboard.keyboard_top
     
     if y_zone_end - y_zone_start < 50:
@@ -401,39 +468,47 @@ def detect_notes_in_frame(
     roi = frame[y_zone_start:y_zone_end, :]
     hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
     
-    # Vytvorit masku pro barevne noty
-    # Noty jsou syte barvy (vysoka saturace a value)
-    sat_thresh = config.color_saturation_min
-    val_thresh = config.color_value_min
+    # Adaptivni nebo fixni thresholdy
+    if config.adaptive_thresholds:
+        sat_thresh, val_thresh = _adaptive_color_thresholds(roi, config)
+    else:
+        sat_thresh = config.color_saturation_min
+        val_thresh = config.color_value_min
     
-    # Saturation mask
+    # Saturation + Value mask pro barevne noty
     sat_mask = hsv[:, :, 1] > sat_thresh
     val_mask = hsv[:, :, 2] > val_thresh
     color_mask = sat_mask & val_mask
     
-    # Volitelne: vyloucit velmi tmave noty
+    # Vyloucit velmi tmave objekty
     if config.exclude_dark_notes:
         bright_mask = hsv[:, :, 2] > config.min_note_brightness
         color_mask = color_mask & bright_mask
     
-    # Eroze + dilatace pro odstraneni sumu
+    # Morphological cleaning
     kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
     color_mask = cv2.morphologyEx(color_mask.astype(np.uint8) * 255, cv2.MORPH_CLOSE, kernel)
+    color_mask = cv2.morphologyEx(color_mask, cv2.MORPH_OPEN, kernel)
+    
+    # Glow note detekce (pro videa s "sviticimi" notami)
+    if config.glow_note_support:
+        glow_mask = _detect_glow_notes(hsv, val_thresh)
+        combined_mask = cv2.bitwise_or(color_mask, glow_mask)
+    else:
+        combined_mask = color_mask
     
     detected = []
     
-    # Pro kazdou klavesu zkontrolovat jestli je nad ni nota
     for key in keyboard.keys:
-        # Zona nad klavesou (sirka klavesy + maly presah)
         key_width = key.x_right - key.x_left
         x_left = max(0, key.x_left - key_width // 4)
         x_right = min(w, key.x_right + key_width // 4)
         
-        key_mask = color_mask[:, x_left:x_right]
+        key_mask = combined_mask[:, x_left:x_right]
         active_pixels = cv2.countNonZero(key_mask)
         
         if active_pixels >= config.min_note_pixels:
-            # Vypocitat prumerne HSV aktivnich pixelu
+            # Prumerne HSV aktivnich pixelu
             key_hsv_roi = hsv[:, x_left:x_right]
             active_pixels_3d = np.stack([key_mask] * 3, axis=-1) > 0
             active_hsv_values = key_hsv_roi[active_pixels_3d[:, :, 0]]
@@ -443,10 +518,41 @@ def detect_notes_in_frame(
             else:
                 avg_hsv = (0, 0, 0)
             
-            confidence = min(1.0, active_pixels / (config.min_note_pixels * 4))
-            detected.append((key.midi_note, confidence, avg_hsv))
+            # Confidence z poctu pixelu (normalizovano)
+            key_area = (x_right - x_left) * (y_zone_end - y_zone_start)
+            fill_ratio = active_pixels / max(1, key_area)
+            confidence = min(1.0, active_pixels / (config.min_note_pixels * 3))
+            
+            detected.append((key.midi_note, confidence, avg_hsv, active_pixels))
     
     return detected
+
+
+def _detect_glow_notes(hsv: np.ndarray, base_val_thresh: int) -> np.ndarray:
+    """
+    Detekuje "glow" style noty — vysoke value, nizka saturace,
+    typicky bile/zlute/zelene sviceni.
+    
+    Tyto noty byvaji detekovany spatne pri standardni HSV filtraci,
+    protoze maji nizkou saturaci ale vysokou intenzitu.
+    """
+    h_channel = hsv[:, :, 0]
+    s_channel = hsv[:, :, 1]
+    v_channel = hsv[:, :, 2]
+    
+    # Glow noty: vysoky jas, nizka/stredni saturace, zlute/zelene/modre tony
+    # Hue rozsahy: zelena(35-85), zluta(15-35), modra(85-130)
+    high_val = v_channel > max(180, base_val_thresh + 40)
+    low_sat = s_channel > 30  # Nizsi nez obvykle, ale ne uplne sede
+    med_sat = s_channel < 200  # Ne prehnane syte
+    
+    glow_mask = high_val & low_sat & med_sat
+    
+    # Cleanup
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    glow_mask = cv2.morphologyEx(glow_mask.astype(np.uint8) * 255, cv2.MORPH_CLOSE, kernel)
+    
+    return glow_mask
 
 
 def detect_notes_from_video(
@@ -458,7 +564,7 @@ def detect_notes_from_video(
     Hlavni funkce: analyzuje video a vrati seznam detekovanych not.
     
     Dvoufazovy pristup:
-    1. Detekce klavesnice (prvnich N snimku)
+    1. Detekce klavesnice (multi-frame consensus)
     2. Detekce not nad klavesnici (cele video)
     
     Args:
@@ -488,26 +594,31 @@ def detect_notes_from_video(
     print("  Faze 1: Detekce klavesnice...")
     
     keyboard = None
-    sample_frames = [0, total_frames // 4, total_frames // 2, 3 * total_frames // 4]
     
-    for frame_idx in sample_frames:
-        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
-        ret, frame = cap.read()
-        if not ret:
-            continue
-        
-        kb = detect_keyboard(frame, config)
-        if kb is not None and len(kb.keys) > 5:
-            keyboard = kb
-            print(f"    Nalezeno {len(kb.keys)} klaves ({kb.num_octaves:.1f} oktáv)")
-            print(f"    Rozsah: {kb.keys[0].note_name} - {kb.keys[-1].note_name}")
-            print(f"    Klavesnice Y: {kb.keyboard_top}-{kb.keyboard_bottom}")
-            break
+    if config.multi_sample_keyboard:
+        # Multi-frame consensus (vylepsena presnost)
+        print(f"    Multi-sample consensus ({config.keyboard_samples} vzorku)...")
+        keyboard = detect_keyboard_consensus(cap, config, num_samples=config.keyboard_samples)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    else:
+        # Legacy: 4 sample frames
+        sample_frames = [0, total_frames // 4, total_frames // 2, 3 * total_frames // 4]
+        for frame_idx in sample_frames:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+            ret, frame = cap.read()
+            if not ret:
+                continue
+            kb = detect_keyboard(frame, config)
+            if kb is not None and len(kb.keys) > 5:
+                keyboard = kb
+                break
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
     
-    cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-    
-    if keyboard is None:
-        # Fallback - pouzit vychozi rozlozeni
+    if keyboard is not None:
+        print(f"    Nalezeno {len(keyboard.keys)} klaves ({keyboard.num_octaves:.1f} oktav)")
+        print(f"    Rozsah: {keyboard.keys[0].note_name} - {keyboard.keys[-1].note_name}")
+        print(f"    Klavesnice Y: {keyboard.keyboard_top}-{keyboard.keyboard_bottom}")
+    else:
         print("    Klavesnice nedetekovana, pouzivam vychozi rozlozeni")
         keyboard = create_default_keyboard(width, height, config)
     
@@ -531,17 +642,23 @@ def detect_notes_from_video(
             detected_midi = set(n[0] for n in detected)
             
             # Aktualizovat aktivni noty
-            for midi_note, conf, hsv in detected:
+            for midi_note, conf, hsv, pixel_count in detected:
                 if midi_note in active_notes:
                     active_notes[midi_note]['last_frame'] = frame_idx
                     active_notes[midi_note]['confidence_sum'] += conf
                     active_notes[midi_note]['frame_count'] += 1
+                    active_notes[midi_note]['total_pixels'] += pixel_count
+                    active_notes[midi_note]['max_pixels'] = max(
+                        active_notes[midi_note]['max_pixels'], pixel_count
+                    )
                 else:
                     active_notes[midi_note] = {
                         'start_frame': frame_idx,
                         'last_frame': frame_idx,
                         'confidence_sum': conf,
                         'frame_count': 1,
+                        'total_pixels': pixel_count,
+                        'max_pixels': pixel_count,
                         'hsv': hsv
                     }
             
@@ -556,7 +673,14 @@ def detect_notes_from_video(
                         
                         if end_time - start_time >= config.min_note_duration:
                             avg_conf = data['confidence_sum'] / data['frame_count']
-                            velocity = int(min(127, max(30, avg_conf * 127)))
+                            
+                            # Velocity z velikosti noty (vetsi = hlasitejsi)
+                            if config.velocity_from_size:
+                                max_px = data['max_pixels']
+                                # Normalizovat: 25px ~ vel 50, 200px ~ vel 127
+                                velocity = int(min(127, max(40, 40 + max_px * 0.5)))
+                            else:
+                                velocity = int(min(127, max(30, avg_conf * 127)))
                             
                             all_notes.append(DetectedNote(
                                 midi_note=midi_note,
@@ -585,7 +709,13 @@ def detect_notes_from_video(
         end_time = data['last_frame'] / fps
         if end_time - start_time >= config.min_note_duration:
             avg_conf = data['confidence_sum'] / data['frame_count']
-            velocity = int(min(127, max(30, avg_conf * 127)))
+            
+            if config.velocity_from_size:
+                max_px = data['max_pixels']
+                velocity = int(min(127, max(40, 40 + max_px * 0.5)))
+            else:
+                velocity = int(min(127, max(30, avg_conf * 127)))
+            
             all_notes.append(DetectedNote(
                 midi_note=midi_note,
                 start_time=start_time,
@@ -613,18 +743,15 @@ def create_default_keyboard(width: int, height: int, config: DetectorConfig) -> 
     num_keys = 88
     midi_start = 21  # A0
     
-    # 52 bilych klaves
     num_white = 52
     white_width = width / num_white
     
-    # Pattern bilych klaves v oktave (od A): A B C D E F G
-    # Ale MIDI zacina na A0=21
-    white_pattern_from_a = [9, 11, 0, 2, 4, 5, 7]  # A B C D E F G offsets
+    white_pattern_from_a = [9, 11, 0, 2, 4, 5, 7]
     
     white_idx = 0
     for key_idx in range(num_keys):
         midi_note = midi_start + key_idx
-        note_in_octave = (key_idx + 9) % 12  # +9 protoze zaciname na A
+        note_in_octave = (key_idx + 9) % 12
         is_black = note_in_octave in [1, 3, 6, 8, 10]
         
         if not is_black:
@@ -633,7 +760,6 @@ def create_default_keyboard(width: int, height: int, config: DetectorConfig) -> 
             x_right = int((white_idx + 1) * white_width)
             white_idx += 1
         else:
-            # Cerna mezi predchozi a nasledujici bilou
             x_center = int(white_idx * white_width)
             bw = int(white_width * 0.6)
             x_left = x_center - bw // 2
@@ -707,7 +833,6 @@ def preview_frame(video_path: str, output_path: str, time_s: float = 5.0,
     
     h, w = frame.shape[:2]
     
-    # Detekovat klavesnici
     keyboard = detect_keyboard(frame, config)
     
     if keyboard:
@@ -715,7 +840,6 @@ def preview_frame(video_path: str, output_path: str, time_s: float = 5.0,
         cv2.rectangle(frame, (0, keyboard.keyboard_top), 
                      (w, keyboard.keyboard_bottom), (0, 255, 0), 2)
         
-        # Vyznacit jednotlive klavesy
         for key in keyboard.keys:
             if key.is_black:
                 cv2.rectangle(frame, (key.x_left, keyboard.keyboard_top),
@@ -724,14 +848,12 @@ def preview_frame(video_path: str, output_path: str, time_s: float = 5.0,
                 cv2.rectangle(frame, (key.x_left, keyboard.keyboard_top),
                             (key.x_right, keyboard.keyboard_bottom), (255, 0, 0), 1)
             
-            # Popisek kazdou 12. klavesu (C)
             if key.note_name.startswith('C') and not key.is_black:
                 cv2.putText(frame, key.note_name, (key.x_center - 8, keyboard.keyboard_top - 5),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.35, (255, 255, 0), 1)
         
-        # Detekovat noty v tomto snimku
         detected = detect_notes_in_frame(frame, config, keyboard)
-        for midi, conf, hsv in detected:
+        for midi, conf, hsv, pixels in detected:
             key = keyboard.get_key_by_midi(midi)
             if key:
                 y_zone_start = max(0, keyboard.keyboard_top - int(h * 0.6))
@@ -754,7 +876,9 @@ if __name__ == '__main__':
         preview_frame(video, "output/preview.jpg", time_s=10.0)
         
         print("Spoustim detekci not...")
-        notes = detect_notes_from_video(video, progress_callback=lambda p, m: print(f"  [{p:.0f}%] {m}"))
+        config = DetectorConfig()
+        notes = detect_notes_from_video(video, config=config, 
+                                        progress_callback=lambda p, m: print(f"  [{p:.0f}%] {m}"))
         
         print(f"\nPrvnich 20 not:")
         for n in notes[:20]:

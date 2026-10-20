@@ -42,8 +42,12 @@ Priklady:
   python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI
   python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI --output ./moje_noty
   python main.py --local video.mp4
+  python main.py --local video.mp4 --audio --method basic-pitch
   python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI --preview-only
   python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI --skip-sheet
+
+GUI:
+  streamlit run app.py
         """
     )
     
@@ -55,12 +59,14 @@ Priklady:
     parser.add_argument('--skip-sheet', action='store_true', help='Preskocit generovani notoveho zapisu')
     parser.add_argument('--skip-midi', action='store_true', help='Preskocit generovani MIDI')
     parser.add_argument('--frame-skip', type=int, default=2, help='Analyzovat kazdy N-ty snimek (default: 2)')
-    parser.add_argument('--min-pixels', type=int, default=30, help='Minimalni pocet pixelu pro detekci noty (default: 30)')
-    parser.add_argument('--num-keys', type=int, default=88, help='Pocet klaves piana (default: 88)')
+    parser.add_argument('--min-pixels', type=int, default=25, help='Minimalni pocet pixelu pro detekci noty (default: 25)')
     parser.add_argument('--min-duration', type=float, default=0.05, help='Minimalni delka noty v sekundach (default: 0.05)')
     parser.add_argument('--title', '-t', help='Nazev skladby (default: z nazvu videa)')
     parser.add_argument('--tempo', type=int, default=120, help='Tempo v BPM (default: 120)')
     parser.add_argument('--notes-per-staff', type=int, default=16, help='Pocet not na jeden radk (default: 16)')
+    parser.add_argument('--audio', action='store_true', help='Pouzit audio->MIDI misto video detekce')
+    parser.add_argument('--method', choices=['auto', 'basic-pitch', 'librosa'], default='auto',
+                        help='Metoda audio detekce (s --audio): auto, basic-pitch, librosa')
     parser.add_argument('--verbose', '-v', action='store_true', help='Detailni logovani')
     
     args = parser.parse_args()
@@ -111,6 +117,7 @@ Priklady:
             sys.exit(1)
     
     title = args.title if args.title else video_title
+    safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()[:50]
     
     # ── KROK 2: Nahled (volitelne) ──
     print_step(2, "Nahledovy snimek")
@@ -130,29 +137,54 @@ Priklady:
         return
     
     # ── KROK 3: Detekce not ──
-    print_step(3, "Detekce not z videa")
+    notes = []
     
-    config = DetectorConfig(
-        frame_skip=args.frame_skip,
-        min_note_pixels=args.min_pixels,
-        num_keys=args.num_keys,
-        min_note_duration=args.min_duration,
-    )
+    if args.audio:
+        # Audio -> MIDI cesta
+        print_step(3, "Extrakce audia a detekce not (audio)")
+        
+        from audio_to_midi import extract_audio_from_video, audio_file_to_midi
+        
+        audio_path = os.path.join(output_dir, f"{safe_title}.wav")
+        audio_result = extract_audio_from_video(video_path, audio_path)
+        
+        if audio_result:
+            midi_temp = os.path.join(output_dir, f"{safe_title}_audio.mid")
+            notes = audio_file_to_midi(audio_result, midi_temp, tempo=args.tempo, method=args.method)
+            if not notes:
+                print("  Audio detekce nenasla zadne noty.")
+        else:
+            print("  Extrakce audia selhala.")
+            print("  Tip: Nainstaluj ffmpeg nebo pouzij video detekci (bez --audio)")
+            sys.exit(1)
     
-    def progress(pct, msg):
-        bar_len = 30
-        filled = int(bar_len * pct / 100)
-        bar = '█' * filled + '░' * (bar_len - filled)
-        print(f"\r  [{bar}] {pct:5.1f}% | {msg}", end='', flush=True)
-    
-    try:
-        notes = detect_notes_from_video(video_path, config=config, progress_callback=progress)
-    except Exception as e:
-        print(f"\n  CHYBA pri detekci: {e}")
-        if args.verbose:
-            import traceback
-            traceback.print_exc()
-        sys.exit(1)
+    if not notes:
+        # Fallback: video detekce (pokud audio selhalo nebo nebylo zadano)
+        if args.audio:
+            print("  Fallback: video detekce not...")
+        
+        print_step(3, "Detekce not z videa")
+        
+        config = DetectorConfig(
+            frame_skip=args.frame_skip,
+            min_note_pixels=args.min_pixels,
+            min_note_duration=args.min_duration,
+        )
+        
+        def progress(pct, msg):
+            bar_len = 30
+            filled = int(bar_len * pct / 100)
+            bar = '█' * filled + '░' * (bar_len - filled)
+            print(f"\r  [{bar}] {pct:5.1f}% | {msg}", end='', flush=True)
+        
+        try:
+            notes = detect_notes_from_video(video_path, config=config, progress_callback=progress)
+        except Exception as e:
+            print(f"\n  CHYBA pri detekci: {e}")
+            if args.verbose:
+                import traceback
+                traceback.print_exc()
+            sys.exit(1)
     
     print()  # Novy radek po progress baru
     
@@ -182,7 +214,6 @@ Priklady:
     # ── KROK 4: Export notoveho seznamu ──
     print_step(4, "Export seznamu not (text)")
     
-    safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()[:50]
     text_path = os.path.join(output_dir, f"{safe_title}_notes.txt")
     notes_to_text(notes, text_path, title=title)
     

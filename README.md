@@ -1,57 +1,97 @@
-# YouTube Piano → Sheet Music Generator 🎹
+# 🎹 PianoHelper
 
-Automatický převod YouTube videí s padajícími notami (Synthesia styl) na notový zápis, MIDI a textový seznam not.
+**Převod YouTube videí s padajícími notami (Synthesia styl) na notový zápis, MIDI soubor a textový seznam not.**
 
-## Jak to funguje
+![Python](https://img.shields.io/badge/Python-3.9+-blue)
+![License](https://img.shields.io/badge/License-MIT-green)
 
-1. **Stažení videa** z YouTube pomocí `yt-dlp`
-2. **Adaptivní detekce klávesnice** - automaticky najde bílé/černé klávesy a jejich rozsah
-3. **Detekce not** - OpenCV analyzuje barevné obdélníky padající na klávesnici
-4. **Export**:
-   - 📄 **Notový zápis** (PNG) - vykreslený pomocí matplotlib
-   - 🎵 **MIDI soubor** - přehratelný v jakémkoli hudebním programu
-   - 📝 **Textový seznam** - čas, nota, délka, hlasitost
+## Funkce
 
-## Požadavky
+- 🎬 **Video detekce not** — OpenCV analýza Synthesia-style videí s padajícími notami
+- 🎵 **Audio→MIDI** — Spotify basic-pitch (polyfonní) nebo librosa pyin (monofonní)
+- 🎼 **Notový zápis** — Automatické generování PNG notových listů
+- 📊 **MIDI export** — Standardní .mid soubory kompatibilní s MuseScore, FL Studio, atd.
+- 🖥️ **Webové rozhraní** — Streamlit GUI s drag-and-drop a přehráváním
+- 📈 **Adaptivní detekce** — Multi-frame consensus, adaptivní thresholdy, velocity z velikosti not
 
-- Python 3.8+
-- Nainstalované závislosti:
+## Rychlý start
+
+```bash
+# 1. Nainstalovat závislosti
+pip install -r requirements.txt
+
+# 2. Zpracovat YouTube video
+python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI
+
+# 3. Nebo spustit GUI
+streamlit run app.py
+```
+
+## Instalace
+
+### Povinné závislosti
+
 ```bash
 pip install -r requirements.txt
 ```
 
-## Použití
+### Volitelné závislosti
 
-### Základní použití
 ```bash
-python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI
+# Audio→MIDI (doporučeno)
+pip install basic-pitch
+
+# Audio extrakce z videa
+# Windows: https://ffmpeg.org/download.html
+# macOS: brew install ffmpeg
+# Linux: sudo apt install ffmpeg
+
+# Monofonní pitch detection (fallback)
+pip install librosa
+
+# Webové rozhraní
+pip install streamlit
+
+# Pokročilý notový zápis (potřebuje MuseScore/LilyPond)
+pip install music21
 ```
 
-### S vlastními volbami
+## Použití
+
+### CLI
+
 ```bash
+# YouTube video
+python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI
+
+# Lokální video
+python main.py --local video.mp4
+
+# Pouze náhled (bez zpracování)
+python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI --preview-only
+
+# Audio→MIDI místo video detekce
+python main.py --local video.mp4 --audio --method basic-pitch
+
+# Vlastní nastavení
 python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI \
     --output ./moje_noty \
     --title "Moje Skladba" \
-    --tempo 120 \
-    --notes-per-staff 16
+    --tempo 140 \
+    --frame-skip 1 \
+    --min-pixels 15 \
+    --notes-per-staff 20
 ```
 
-### Lokální video soubor
+### Webové rozhraní
+
 ```bash
-python main.py --local video.mp4 --output ./vystup
+streamlit run app.py
 ```
 
-### Pouze náhled (bez detekce)
-```bash
-python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI --preview-only
-```
+Otevře se na `http://localhost:8501` s drag-and-drop rozhraním.
 
-### Přeskočit některé kroky
-```bash
-python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI --skip-sheet --skip-midi
-```
-
-## Parametry
+### Parametry
 
 | Parametr | Popis | Výchozí |
 |----------|-------|---------|
@@ -64,10 +104,11 @@ python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI --skip-sheet --skip-m
 | `--frame-skip` | Analyzovat každý N-tý snímek | `2` |
 | `--min-pixels` | Minimální počet pixelů pro notu | `25` |
 | `--min-duration` | Minimální délka noty (s) | `0.05` |
-| `--num-keys` | Počet kláves (88 = plné piano) | `88` |
 | `--preview-only` | Pouze stáhnout a ukázat náhled | - |
 | `--skip-sheet` | Přeskočit generování notového zápisu | - |
 | `--skip-midi` | Přeskočit generování MIDI | - |
+| `--audio` | Použít audio→MIDI místo video detekce | - |
+| `--method` | Metoda audio detekce (`auto`, `basic-pitch`, `librosa`) | `auto` |
 | `--verbose`, `-v` | Detailní logování | - |
 
 ## Struktura projektu
@@ -75,76 +116,96 @@ python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI --skip-sheet --skip-m
 ```
 Piano/
 ├── main.py                # Hlavní skript s CLI
-├── video_downloader.py    # Stahování videí z YouTube
+├── app.py                 # Streamlit webové rozhraní
+├── video_downloader.py    # Stahování videí z YouTube (yt-dlp)
 ├── note_detector.py       # Detekce klávesnice a not (OpenCV)
-├── midi_generator.py      # Převod not na MIDI
-├── sheet_renderer.py      # Generování notového zápisu
-├── audio_to_midi.py       # Alternativní audio→MIDI (volitelné)
+├── midi_generator.py      # Převod not na MIDI (mido)
+├── sheet_renderer.py      # Generování notového zápisu (matplotlib)
+├── audio_to_midi.py       # Audio→MIDI (basic-pitch / librosa)
 ├── requirements.txt       # Python závislosti
 └── README.md              # Tento soubor
 ```
 
+## Jak to funguje
+
+### Video detekce (výchozí)
+
+1. **Stažení videa** z YouTube (nebo lokální soubor)
+2. **Detekce klávesnice** — multi-frame consensus algoritmus najde bílé a černé klávesy
+3. **Detekce not** — HSV filtrace barevných objektů nad klávesnicí v každém snímku
+4. **Tracking** — sledování aktivních not napříč snímky, výpočet začátku/konce
+5. **Export** — MIDI, PNG notový zápis, textový seznam
+
+### Audio→MIDI (`--audio`)
+
+1. **Extrakce audia** z videa (ffmpeg)
+2. **Pitch detection** — basic-pitch (polyfonní) nebo librosa pyin (monofonní)
+3. **Export** — stejný jako výše
+
 ## Podporované typy videí
 
 Program je optimalizovaný pro **Synthesia-style** videa:
+
 - ✅ Padající barevné noty na klávesnici
 - ✅ Černé pozadí s barevnými klávesami
 - ✅ Standardní piano layout (A0-C8 nebo menší)
+- ✅ "Glow" styl not (svítící, nízká saturace)
 - ⚠️ Jiné styly mohou vyžadovat úpravu parametrů
 
 ## Tipy pro lepší výsledky
 
-1. **Nízká přesnost?** Zkuste:
-   - Snížit `--min-pixels` na 15-20
-   - Snížit `--frame-skip` na 1 (analyzovat každý snímek)
-   - Zvýšit rozlišení videa (stáhnout v lepší kvalitě)
+**Nízká přesnost?**
+- Snížit `--min-pixels` na 15-20
+- Snížit `--frame-skip` na 1 (analyzovat každý snímek)
+- Stáhnout video ve vyšší kvalitě
 
-2. **Příliš mnoho falešných not?** Zkuste:
-   - Zvýšit `--min-pixels` na 40-50
-   - Zvýšit `--min-duration` na 0.1s
+**Příliš mnoho falešných not?**
+- Zvýšit `--min-pixels` na 40-50
+- Zvýšit `--min-duration` na 0.1s
 
-3. **Video nemá klávesnici?**
-   - Program automaticky použije výchozí rozložení
-   - Pro lepší výsledky použijte `--num-keys` s počtem kláves ve videu
+**Video bez klávesnice?**
+- Program automaticky použije výchozí rozložení
+- Pro lepší výsledky zkontrolujte `--notes-per-staff`
 
 ## Otevření výstupů
 
-- **MIDI** soubory otevřete v:
-  - MuseScore (zdarma: musescore.org)
-  - Synthesia (synthesiagame.com)
-  - FL Studio, Ableton Live, GarageBand
-  - Online: midi.show, flat.io
+**MIDI** soubory:
+- [MuseScore](https://musescore.org) (zdarma)
+- [Synthesia](https://synthesiagame.com)
+- FL Studio, Ableton Live, GarageBand
+- Online: [midi.show](https://midi.show), [flat.io](https://flat.io)
 
-- **Notový zápis** (PNG) otevřete v jakémkoli prohlížeči obrázků
+**Notový zápis** (PNG): jakýkoli prohlížeč obrázků
 
-- **Textový seznam** otevřete v textovém editoru
-
-## Příklad výstupu
-
-```
-output/
-├── video.mp4                    # Stažené video
-├── preview.jpg                  # Náhled s detekcí klávesnice
-├── Moje_Skladba.mid             # MIDI soubor
-├── Moje_Skladba_sheet.png       # Notový zápis
-└── Moje_Skladba_notes.txt       # Textový seznam not
-```
+**Textový seznam**: jakýkoli textový editor
 
 ## Známé limity
 
 - Videa s velmi nízkým rozlišením (< 360p) mohou mít horší přesnost
 - Videa bez klávesnice nebo s neobvyklým layoutem vyžadují manuální úpravy
-- Detekce tempa je přibližná - pro přesné tempo použijte `--tempo` parametr
-- Černé klávesy jsou detekovány pouze pokud jsou výrazně tmavší než bílé
+- Detekce tempa je přibližná — pro přesné tempo použijte `--tempo`
+- Audio→MIDI vyžaduje video s audiem (ne jen vizuální noty)
+
+## Vývoj
+
+```bash
+# Vývojové prostředí
+python -m venv .venv
+source .venv/bin/activate  # Linux/macOS
+.venv\Scripts\activate     # Windows
+
+pip install -r requirements.txt
+
+# Test detekce
+python note_detector.py output/video.mp4
+
+# Test MIDI generátoru
+python midi_generator.py
+
+# Test audio→MIDI
+python audio_to_midi.py audio.wav basic-pitch
+```
 
 ## Licence
 
-Volně k použití pro osobní i komerční účely.
-
----
-
-**Tip**: Pokud máte video s audiem (ne jen vizuální noty), můžete použít alternativní cestu:
-```bash
-pip install librosa
-python audio_to_midi.py audio.wav
-```
+Volně k použití pro osobní i komerční účely (MIT).
