@@ -12,6 +12,33 @@ function colors() {
   return C;
 }
 
+// Standardni klaviatury (jako ve videich): 88 = cele piano, 61 = bezny keyboard.
+export const KEY_RANGES = {
+  88: [21, 108],   // A0-C8
+  76: [28, 103],   // E1-G7
+  61: [36, 96],    // C2-C7
+  49: [36, 84],    // C2-C6
+};
+
+/**
+ * Viditelny rozsah klaviatury [lo, hi].
+ * mode: 'auto' (podle skladby), '88' | '76' | '61' | '49', 'custom' (custom = {lo, hi}).
+ * Standardni rozsah se posune o oktavy, aby skladba byla videt; kdyz je skladba sirsi, rozsiri se.
+ */
+export function keyRange(mode, songLo, songHi, custom) {
+  if (mode === 'custom' && custom) return [Math.max(21, custom.lo), Math.min(108, custom.hi)];
+  if (mode === 'auto' || !KEY_RANGES[mode]) {
+    let lo = Math.min(songLo, 60) - 2, hi = Math.max(songHi, 60) + 2;      // C4 vzdy videt (orientace)
+    while (hi - lo < 24) { lo--; hi++; }                                    // aspon 2 oktavy
+    return [Math.max(21, lo), Math.min(108, hi)];
+  }
+  let [lo, hi] = KEY_RANGES[mode];
+  if (songHi - songLo > hi - lo) return [Math.max(21, Math.min(lo, songLo)), Math.min(108, Math.max(hi, songHi))];
+  while (songLo < lo && lo - 12 >= 21) { lo -= 12; hi -= 12; }
+  while (songHi > hi && hi + 12 <= 108) { lo += 12; hi += 12; }
+  return [lo, hi];
+}
+
 // Rozlozeni klaves pro rozsah [lo, hi] (zaokrouhleno na cele bile klavesy).
 export function layoutKeys(lo, hi, width) {
   while (isBlack(lo)) lo--;
@@ -119,8 +146,23 @@ export function draw(canvas, opts) {
   ctx.textBaseline = 'middle';
   for (const n of visible) {
     const k = layout.keys.get(n.p);
-    if (!k) continue;
     const hand = n.h === 'L' ? 'L' : 'R';
+    if (!k) {
+      // nota mimo zvoleny vyrez klaviatury -> znacka na okraji (at se na ni nezapomene)
+      const yb = Math.min(hitY, hitY - (n.s - now) * pps), yt = hitY - (n.e - now) * pps;
+      const left = n.p < layout.lo;
+      ctx.fillStyle = c[hand];
+      ctx.globalAlpha = 0.85;
+      ctx.fillRect(left ? 0 : W - 4, yt, 4, Math.max(3, yb - yt));
+      ctx.beginPath();
+      const ax = left ? 6 : W - 6, dir = left ? -1 : 1;
+      ctx.moveTo(ax + dir * 6, yb - 6);
+      ctx.lineTo(ax, yb - 12);
+      ctx.lineTo(ax, yb);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      continue;
+    }
     const yBottom = Math.min(hitY, hitY - (n.s - now) * pps);
     const yTop = hitY - (n.e - now) * pps;
     const h = Math.max(3, yBottom - yTop - 2);
@@ -257,6 +299,36 @@ export function draw(canvas, opts) {
       }
     }
   }
+}
+
+// Minimapa celeho piana (88 klaves): viditelny vyrez + rozsah skladby.
+export function drawKeyMap(canvas, { lo, hi, songLo, songHi }) {
+  const { ctx, W, H } = fitCanvas(canvas);
+  const c = colors();
+  ctx.clearRect(0, 0, W, H);
+  const map = layoutKeys(21, 108, W);
+  for (const pass of [false, true]) {
+    for (const [p, k] of map.keys) {
+      if (k.black !== pass) continue;
+      const inside = p >= lo && p <= hi;
+      ctx.fillStyle = k.black ? (inside ? '#0c0b09' : '#24211c') : (inside ? c.paper : '#4a453c');
+      ctx.fillRect(k.x + (k.black ? 0 : 0.5), 0, k.w - (k.black ? 0 : 1), k.black ? H * 0.6 : H);
+      if (p === 60) { ctx.fillStyle = c.accent; ctx.fillRect(k.x + k.w / 2 - 1, H - 6, 2, 3); }
+    }
+  }
+  const x0 = map.keys.get(lo)?.x ?? 0;
+  const kh = map.keys.get(hi);
+  const x1 = kh ? kh.x + kh.w : W;
+  ctx.strokeStyle = c.accent;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(x0 + 1, 1, x1 - x0 - 2, H - 2);
+  // rozsah skladby
+  const s0 = map.keys.get(songLo), s1 = map.keys.get(songHi);
+  if (s0 && s1) {
+    ctx.fillStyle = c.accent;
+    ctx.fillRect(s0.x, H - 2, s1.x + s1.w - s0.x, 2);
+  }
+  return map;
 }
 
 // Casova osa: nahled vsech not, odehrana cast, smycka, pozice.

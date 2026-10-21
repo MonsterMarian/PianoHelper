@@ -1,8 +1,8 @@
 import { arrange, LEVELS } from './arrange.js';
 import { estimateGrid, chordTrack, detectKey } from './analysis.js';
 import { Player } from './audio.js';
-import { draw, drawTimeline, layoutKeys } from './render.js';
-import { songEnd, noteName } from './music.js';
+import { draw, drawTimeline, drawKeyMap, layoutKeys, keyRange } from './render.js';
+import { songEnd, noteName, isBlack } from './music.js';
 import { toMusicXML } from './musicxml.js';
 import { keyboardInput, midiInput } from './input.js';
 
@@ -18,7 +18,10 @@ const state = {
   title: '', file: '', base: [], grid: null, chords: [], key: null, level: prefs.level ?? 4,
   notes: [], cache: new Map(), duration: 0, lo: 48, hi: 84, loop: null, loopOn: false,
   library: [], pressed: new Map(), octave: prefs.octave ?? 4,
+  range: prefs.range ?? '61', custom: prefs.custom ?? null, songLo: 60, songHi: 72,
 };
+
+window.pianoHelper.state = state;
 
 const fmt = (t) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
 function message(text) {
@@ -96,11 +99,72 @@ function applyLevel() {
   state.notes = state.cache.get(state.level);
   player.setNotes(state.notes);
   const ps = state.notes.map((n) => n.p);
-  state.lo = Math.min(...ps, 60) - 2; state.hi = Math.max(...ps, 60) + 2;   // C4 je vzdy videt (orientace)
-  while (state.hi - state.lo < 24) { state.lo--; state.hi++; }               // aspon 2 oktavy
+  state.songLo = Math.min(...ps); state.songHi = Math.max(...ps);
+  updateRange();
   state.duration = songEnd(state.notes);
   for (const b of $('levels').children) b.setAttribute('aria-pressed', String(Number(b.dataset.level) === state.level));
 }
+
+// Viditelny vyrez klaviatury (61 klaves jako ve videich, nebo co si uzivatel zvoli)
+function updateRange() {
+  [state.lo, state.hi] = keyRange(state.range, state.songLo, state.songHi, state.custom);
+  $('range').value = state.range;
+}
+$('range').addEventListener('change', () => {
+  state.range = $('range').value;
+  if (state.range === 'custom' && !state.custom) state.custom = { lo: state.lo, hi: state.hi };
+  prefs.range = state.range; savePrefs();
+  updateRange();
+});
+
+// minimapa: tazeni = posun vyrezu, tazeni za okraj = velikost, klik vedle = skok
+const km = $('keymap');
+let kmDrag = null;
+const kmPitch = (ev) => {
+  const r = km.getBoundingClientRect();
+  const x = ev.clientX - r.left;
+  for (const [p, k] of layoutKeys(21, 108, r.width).keys) if (!k.black && x >= k.x && x < k.x + k.w) return p;
+  return x < 0 ? 21 : 108;
+};
+const snap = (lo, hi) => {
+  lo = Math.max(21, Math.min(lo, 96)); hi = Math.min(108, Math.max(hi, lo + 12));
+  while (isBlack(lo)) lo--;
+  while (isBlack(hi)) hi++;
+  return { lo, hi };
+};
+km.addEventListener('pointerdown', (ev) => {
+  const p = kmPitch(ev);
+  const { lo, hi } = state;
+  if (Math.abs(p - lo) <= 1) kmDrag = { mode: 'lo' };
+  else if (Math.abs(p - hi) <= 1) kmDrag = { mode: 'hi' };
+  else {
+    if (p < lo || p > hi) {                                           // klik vedle -> vyrez se tam presune
+      const w = hi - lo;
+      const nlo = Math.max(21, Math.min(108 - w, p - Math.round(w / 2)));
+      state.custom = snap(nlo, nlo + w);
+      state.range = 'custom';
+      updateRange();
+    }
+    kmDrag = { mode: 'pan', grab: p - state.lo, width: state.hi - state.lo };
+  }
+  km.setPointerCapture(ev.pointerId);
+});
+km.addEventListener('pointermove', (ev) => {
+  if (!kmDrag) return;
+  const p = kmPitch(ev);
+  let { lo, hi } = state;
+  if (kmDrag.mode === 'lo') lo = Math.min(p, hi - 12);
+  else if (kmDrag.mode === 'hi') hi = Math.max(p, lo + 12);
+  else { lo = Math.max(21, Math.min(108 - kmDrag.width, p - kmDrag.grab)); hi = lo + kmDrag.width; }
+  state.custom = snap(lo, hi);
+  state.range = 'custom';
+  updateRange();
+});
+km.addEventListener('pointerup', () => {
+  if (!kmDrag) return;
+  kmDrag = null;
+  prefs.range = state.range; prefs.custom = state.custom; savePrefs();
+});
 
 // ── Import .mid / .json ─────────────────────────────────────────────────────
 function midiToNotes(buf) {
@@ -325,7 +389,8 @@ function frame() {
       showFingers: $('fingers').checked, loop: state.loopOn ? state.loop : null,
       mine: { L: $('mine-l').checked, R: $('mine-r').checked }, pressed: state.pressed, waiting,
     });
-    drawTimeline(tl, { notes: state.notes, duration: state.duration, now, loop: state.loop, lo: state.lo, hi: state.hi });
+    drawTimeline(tl, { notes: state.notes, duration: state.duration, now, loop: state.loop, lo: state.songLo, hi: state.songHi });
+    drawKeyMap(km, { lo: state.lo, hi: state.hi, songLo: state.songLo, songHi: state.songHi });
     $('time').firstChild.textContent = fmt(now);
     $('time').lastChild.textContent = `/ ${fmt(state.duration)}`;
     const ch = state.chords.find((c) => c.s <= now && c.e > now);

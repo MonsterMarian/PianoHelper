@@ -25,6 +25,7 @@
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 html, body { margin: 0; height: 100%; }
 body {
   background: var(--stage);
@@ -112,6 +113,10 @@ button, input, select { font: inherit; color: inherit; }
 .loop-ctrl .key-btn.square { width: 28px; }
 .loop-ctrl .hint { margin: 0 0 0 6px; min-width: 96px; }
 .timeline { display: block; flex: 1; min-width: 0; height: 44px; cursor: pointer; touch-action: none; }
+.range-ctrl { display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-left: 1px solid var(--line); flex: none; }
+.range-ctrl select { height: 28px; padding: 0 8px; font-size: 11px; }
+.keymap-mini { width: 230px; height: 28px; display: block; cursor: grab; touch-action: none; }
+.keymap-mini:active { cursor: grabbing; }
 .deck-row { display: flex; flex-wrap: wrap; align-items: stretch; }
 .cell {
   display: flex; flex-direction: column; justify-content: center; gap: 9px;
@@ -260,6 +265,8 @@ input[type="range"]::-moz-range-thumb { width: 12px; height: 18px; border: 0; bo
   .scrub { flex-wrap: wrap; }
   .loop-ctrl { flex: 1 1 100%; border-right: 0; border-bottom: 1px solid var(--line); }
   .timeline { flex-basis: 100%; }
+  .range-ctrl { flex: 1 1 100%; border-left: 0; border-top: 1px solid var(--line); }
+  .keymap-mini { flex: 1 1 0; width: 0; min-width: 0; }
   .levels small { display: none; }
   .tempo { flex: 1; }
   .song-list button { grid-template-columns: 32px 1fr; padding: 16px; }

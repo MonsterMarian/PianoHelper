@@ -251,3 +251,18 @@ test('MusicXML: kazdy takt ma spravnou delku, zadna nota se neztrati', async () 
     }
   }
 });
+
+test('rozsah klaviatury: standardni velikosti, posun za skladbou, vlastni', async () => {
+  const { keyRange, layoutKeys } = await import('../web/js/render.js');
+  assert.deepEqual(keyRange('88', 60, 72), [21, 108]);
+  assert.deepEqual(keyRange('61', 48, 79), [36, 96]);                 // skladba se vejde
+  assert.deepEqual(keyRange('49', 60, 93), [48, 96]);                 // posun o oktavu nahoru
+  assert.deepEqual(keyRange('49', 24, 70), [24, 72]);                 // posun o oktavu dolu
+  assert.deepEqual(keyRange('49', 30, 95), [30, 95]);                 // skladba sirsi -> rozsirit
+  assert.deepEqual(keyRange('custom', 60, 72, { lo: 48, hi: 84 }), [48, 84]);
+  const [lo, hi] = keyRange('auto', 64, 67);
+  assert.ok(lo <= 60 && hi >= 67 && hi - lo >= 24);                    // C4 + aspon 2 oktavy
+  const whites = (r) => [...layoutKeys(r[0], r[1], 1000).keys.values()].filter((k) => !k.black).length;
+  assert.equal(whites(keyRange('88', 60, 72)), 52);
+  assert.equal(whites(keyRange('61', 60, 72)), 36);
+});

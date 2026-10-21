@@ -30,6 +30,7 @@ python main.py --local video.mp4 --start-note E2      # nejlevější bílá kl�
 | **Prstoklad** | „Prsty“ (P): číslo prstu na notě i na stisknuté klávese |
 | **Čekej na mě** | přehrávač počká, až zahraješ správné tóny — MIDI klavír nebo klávesnice počítače (A W S E D F T G Y H U J K = C…C, Z/X oktáva) |
 | Nácvik po rukou | „Hraju já: Pravá / Levá“ — tu ruku hraješ sám, druhá zní a je ztlumená |
+| **Kolik piana je vidět** | „Klaviatura“: 88 / 76 / 61 (výchozí, jako ve videích) / 49 kláves / podle skladby; v minimapě táhni výřez, za okraj měníš velikost. Noty mimo výřez ukazuje šipka na okraji |
 | Orientace | tečka na C4, popisky C3/C4/C5, velký název akordu na scéně |
 | **Notový zápis** s prstokladem | Nastavení → „Stáhnout notový zápis (MusicXML)“ → MuseScore |
 | Tempo 25–150 %, rychlost pádu, hlasitost | posuvníky |

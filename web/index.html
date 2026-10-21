@@ -55,6 +55,18 @@
           <span id="loop-info" class="hint">táhni po ose</span>
         </div>
         <canvas id="timeline" class="timeline" aria-label="Časová osa: klik = skok, tažení = výběr úseku"></canvas>
+        <div class="range-ctrl">
+          <label class="label" for="range">Klaviatura</label>
+          <select id="range" title="Kolik kláves je vidět">
+            <option value="88">88 · celé piano</option>
+            <option value="76">76 kláves</option>
+            <option value="61">61 kláves</option>
+            <option value="49">49 kláves</option>
+            <option value="auto">Podle skladby</option>
+            <option value="custom">Vlastní výřez</option>
+          </select>
+          <canvas id="keymap" class="keymap-mini" aria-label="Výřez klaviatury: táhni pro posun, za okraj pro velikost"></canvas>
+        </div>
       </div>
       <div class="deck-row">
         <div class="cell transport">
