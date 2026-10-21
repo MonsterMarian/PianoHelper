@@ -1,10 +1,16 @@
-// Prehravani: vzorky klaviru Salamander (CC-BY 3.0, Alexander Holm) + planovac s predstihem.
+// Prehravani: lokalni vzorky pian (web/samples, licence v README) + planovac s predstihem.
 // Rezim "cekej na me": cas se zastavi u akordu, dokud hrac nezahraje jeho tony.
 import { onsetGroups } from './music.js';
-const SAMPLE_URL = 'https://tonejs.github.io/audio/salamander/';
+export const PIANOS = [
+  { id: 'salamander', name: 'Koncertní křídlo (Salamander)' },
+  { id: 'musyng', name: 'Klavír (Musyng Kite)' },
+  { id: 'fatboy', name: 'Pianino (FatBoy)' },
+  { id: 'bright', name: 'Jasné piano' },
+  { id: 'rhodes', name: 'Elektrické piano (Rhodes)' },
+  { id: 'honkytonk', name: 'Honky-tonk' },
+];
 const SAMPLE_PITCHES = [];
 for (let p = 21; p <= 108; p += 3) SAMPLE_PITCHES.push(p);       // A0, C1, D#1, F#1, ... C8
-const FILE = (p) => ['C', 'Cs', 'D', 'Ds', 'E', 'F', 'Fs', 'G', 'Gs', 'A', 'As', 'B'][p % 12] + (Math.floor(p / 12) - 1);
 
 export class Player {
   constructor() {
@@ -24,6 +30,7 @@ export class Player {
     this.volume = 0.8;
     this.voices = new Set();
     this.samples = new Map();
+    this.piano = 'salamander';
     this.onEnd = null;
   }
 
@@ -36,13 +43,30 @@ export class Player {
     this.loadSamples();
   }
 
-  async loadSamples() {
+  loadSamples() {
+    // stejne piano se nacita jen jednou, i kdyz si o nej rekne vic mist naraz
+    if (this.loading?.piano !== this.piano) this.loading = { piano: this.piano, done: this.fetchSamples() };
+    return this.loading.done;
+  }
+
+  async fetchSamples() {
+    const piano = this.piano;
+    const loaded = new Map();
     await Promise.all(SAMPLE_PITCHES.map(async (p) => {
       try {
-        const res = await fetch(`${SAMPLE_URL}${FILE(p)}.mp3`);
-        this.samples.set(p, await this.ctx.decodeAudioData(await res.arrayBuffer()));
+        const res = await fetch(`samples/${piano}/${p}.mp3`);
+        loaded.set(p, await this.ctx.decodeAudioData(await res.arrayBuffer()));
       } catch { /* bez vzorku se pouzije syntezator */ }
     }));
+    if (piano === this.piano) this.samples = loaded;             // mezitim mohl uzivatel prepnout
+    return loaded.size;
+  }
+
+  // Jiny zvuk piana: stare vzorky hraji, dokud se nenactou nove.
+  setPiano(id) {
+    if (!PIANOS.some((x) => x.id === id) || id === this.piano) return Promise.resolve();
+    this.piano = id;
+    return this.ctx ? this.loadSamples() : Promise.resolve();
   }
 
   setNotes(notes) {

@@ -25,7 +25,7 @@ python main.py --local video.mp4 --start-note E2      # nejlevější bílá kl�
 | funkce | jak |
 |---|---|
 | Padající noty s **písmenem** na notě | „Písmena“; názvy C D E F G A B, česky (H) nebo Do Re Mi (nastavení) |
-| **5 obtížností** | 1 Melodie · 2 Snadné · 3 Střední · 4 Originál · 5 Pokročilé (klávesy 1–5) |
+| **5 obtížností** | 1 Začátečník (hlavní tóny melodie, ≥ 0,6 s od sebe) · 2 Snadné (melodie + bas) · **3 Originál** · 4 Pokročilé (rozložené akordy + harmonie) · 5 Mistr (+ oktávy). Klávesy 1–5 |
 | **Úsek** na opakování — po taktech | „Opakovat“ (L) = úsek od aktuálního taktu; ‹ › nebo `[` `]` = předchozí/další úsek; délka 1/2/4/8 taktů. Na časové ose: tažení = nový úsek, úchyty = okraje, tažení uvnitř = posun, klik mimo = konec opakování. Každé opakování začne o dobu dřív (předehra) |
 | **Časová osa** | nahoře přehled celé skladby (táhni okno), pod ním přiblížené takty, které jedou s hudbou (🔒). Kolečko = přiblížit/oddálit, Shift+kolečko = posun (odemkne), přehrání nebo ‹ › osu zase zamkne |
 | **Pohled** (V) | kolik piana je vidět (klaviatura + minimapa), šířka piana, délka not (jen vzhled — kratší noty padají pomaleji, tempo hudby se nemění), výška pádu, výška klaviatury |
@@ -34,15 +34,16 @@ python main.py --local video.mp4 --start-note E2      # nejlevější bílá kl�
 | **Čekej na mě** | přehrávač počká, až zahraješ správné tóny — MIDI klavír nebo klávesnice počítače (A W S E D F T G Y H U J K = C…C, Z/X oktáva) |
 | Nácvik po rukou | „Hraju já: Pravá / Levá“ — tu ruku hraješ sám, druhá zní a je ztlumená |
 | **Kolik piana je vidět** | Pohled → „Klaviatura“: 88 / 76 / 61 (výchozí, jako ve videích) / 49 kláves / podle skladby; v minimapě táhni výřez, za okraj měníš velikost. Noty mimo výřez ukazuje šipka na okraji |
-| **Kam dát prsty** | „Ruce“ (R): číslo prstu přímo na klávese, kterou zahraje (teď výrazně, za chvíli slaběji), čára = rozpětí ruky |
+| **Kam dát prsty** | „Ruce“ (R, i v nastavení): číslo prstu přímo na klávese, kterou zahraje; kruh kolem čísla se plní jako odpočet. Předstih (0,5–5 s) v nastavení |
+| **Jen jedna ruka** | „Zobrazit: Obě / P / L“ — skryje noty, prsty i osu druhé ruky (zvuk se nemění) |
+| **Zvuk piana** | Nastavení: 6 zvuků (koncertní křídlo Salamander = výchozí, Musyng Kite, FatBoy, jasné piano, Rhodes, honky-tonk), uložené v `web/samples` — funguje i offline |
+| Barvy not, názvy | Nastavení: barva pravé a levé ruky, názvy not zap/vyp, české/mezinárodní/Do-Re-Mi; ♯ / ♭ podle tóniny |
 | Přepínání skladeb | ‹ Knihovna › v hlavičce (K) |
 | Orientace | tečka na C4, popisky C3/C4/C5, velký název akordu na scéně |
 | **Notový zápis** s prstokladem | Nastavení → „Stáhnout notový zápis (MusicXML)“ → MuseScore |
 | Tempo 25–150 %, hlasitost | posuvníky; ←/→ = takt zpět/vpřed |
 
-Přehrávač je statický web (HTML + JS moduly bez buildu). Klavír zní ze vzorků
-[Salamander Grand Piano](https://tonejs.github.io/audio/salamander/) (CC-BY), takže je potřeba
-internet. Bez `server.py` funguje také (např. GitHub Pages), jen bez převodu z YouTube.
+Přehrávač je statický web (HTML + JS moduly bez buildu). Zvuky pian jsou v `web/samples` (licence tamtéž), takže zvuk funguje i offline. Bez `server.py` funguje také (např. GitHub Pages), jen bez převodu z YouTube.
 
 ## Jak to funguje
 
@@ -109,4 +110,4 @@ tests/                testy
 
 ## Licence
 
-MIT. Vzorky klavíru: Salamander Grand Piano, Alexander Holm (CC-BY 3.0).
+MIT. Vzorky pian: viz `web/samples/README.md` (CC BY 3.0 / CC BY-SA 3.0).

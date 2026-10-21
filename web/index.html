@@ -135,7 +135,7 @@
         </div>
 
         <div class="cell grow">
-          <span class="label">Obtížnost</span>
+          <span class="label">Obtížnost · <b id="level-name" class="level-name"></b></span>
           <div id="levels" class="levels" role="group" aria-label="Obtížnost"></div>
         </div>
 
@@ -145,6 +145,15 @@
             <label class="chip"><input id="letters" type="checkbox" checked><span>Písmena</span></label>
             <label class="chip"><input id="fingers" type="checkbox"><span>Prsty</span></label>
             <label class="chip" title="Kam položit ruce: lišta přes 5 kláves s čísly prstů"><input id="hand-pos" type="checkbox" checked><span>Ruce</span></label>
+          </div>
+        </div>
+
+        <div class="cell">
+          <span class="label">Zobrazit</span>
+          <div id="show-hand" class="seg" role="group" aria-label="Zobrazit ruku">
+            <button type="button" data-hand="both" aria-pressed="true">Obě</button>
+            <button type="button" data-hand="R" aria-pressed="false" title="Jen pravá ruka">P</button>
+            <button type="button" data-hand="L" aria-pressed="false" title="Jen levá ruka">L</button>
           </div>
         </div>
 
@@ -194,13 +203,40 @@
       <button class="icon-btn" data-close aria-label="Zavřít">✕</button>
     </div>
     <div class="settings">
-      <label class="field"><span class="label">Názvy not</span>
-        <select id="naming">
-          <option value="intl">C D E F G A B</option>
-          <option value="cz">C D E F G A H — česky</option>
-          <option value="solfege">Do Re Mi</option>
-        </select>
-      </label>
+      <section class="field">
+        <span class="label">Zvuk piana</span>
+        <div class="row">
+          <select id="piano" aria-label="Zvuk piana"></select>
+          <button id="piano-test" class="key-btn" type="button" title="Zahrát akord pro poslech">▶ Poslech</button>
+        </div>
+        <p id="piano-status" class="hint"></p>
+      </section>
+
+      <section class="field">
+        <span class="label">Noty</span>
+        <label class="chip wide"><input id="letters-set" type="checkbox" checked><span>Názvy not na notách</span></label>
+        <label class="field"><span class="label">Názvy</span>
+          <select id="naming">
+            <option value="intl">C D E F G A B</option>
+            <option value="cz">C D E F G A H — česky</option>
+            <option value="solfege">Do Re Mi</option>
+          </select>
+        </label>
+        <div class="colors">
+          <label><input id="color-r" type="color" value="#f2b134"> Pravá ruka</label>
+          <label><input id="color-l" type="color" value="#4fc4b8"> Levá ruka</label>
+          <button id="color-reset" class="key-btn" type="button">Výchozí</button>
+        </div>
+      </section>
+
+      <section class="field">
+        <span class="label">Prsty</span>
+        <label class="chip wide"><input id="hand-pos-set" type="checkbox" checked><span>Ukazovat kam dát prsty</span></label>
+        <label class="field"><span class="label">Předstih <output id="ahead-out">1,5 s</output></span>
+          <input id="finger-ahead" type="range" min="0.5" max="5" step="0.5" value="1.5"></label>
+        <p class="hint">Jak dlouho dopředu se na klávese ukáže číslo prstu. Kruh kolem čísla se plní, až je čas stisknout.</p>
+      </section>
+
       <label class="field"><span class="label">Hlasitost</span><input id="volume" type="range" min="0" max="1" step="0.05" value="0.8"></label>
       <label class="chip wide"><input id="echo" type="checkbox" checked><span>Ozvučit moje hraní</span></label>
 

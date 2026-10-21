@@ -167,64 +167,51 @@ function song() {
 }
 const sounding = (notes, h, t) => notes.filter((n) => n.h === h && n.s <= t + 0.03 && n.e > t + 0.03);
 
-test('uroven 1: jen melodie, jedna nota naraz', () => {
+test('uroven 1: zjednodusena melodie - jen hlavni tony, aspon 0.6 s od sebe', () => {
   const { notes, mel } = song();
-  const out = arrange(notes, 1);
+  // rychla melodie: k melodii v osminach pridat behy v sestnactinach -> uroven 1 je musi vynechat
+  const fast = [...notes];
+  mel.forEach((p, i) => fast.push({ p: p + 2, s: i * 0.5 + 0.125, e: i * 0.5 + 0.2, h: 'R' }, { p: p + 1, s: i * 0.5 + 0.375, e: i * 0.5 + 0.45, h: 'R' }));
+  const out = arrange(fast, 1);
   assert.ok(out.every((n) => n.h === 'R'));
-  assert.deepEqual(out.map((n) => n.p), mel);
+  // tempo 120 (doba 0.5 s) je na zacatecnika rychle -> jeden ton na pul taktu (kazda 2. doba)
+  assert.deepEqual(out.map((n) => n.p), mel.filter((_, i) => i % 2 === 0));
   assert.ok(onsetGroups(out).every((g) => g.notes.length === 1));
+  for (let i = 1; i < out.length; i++) assert.ok(out[i].s - out[i - 1].s > 0.9);
   assert.ok(out.every((n) => n.f >= 1 && n.f <= 5));
 });
 
-test('uroven 2 a 3: leva ruka zjednodusena, pod melodii', () => {
+test('uroven 2: melodie + jeden bas na takt, leva ruka pod melodii', () => {
   const { notes } = song();
-  for (const level of [2, 3]) {
-    const out = arrange(notes, level);
-    const lh = out.filter((n) => n.h === 'L');
-    assert.ok(lh.length >= 4, `L${level}: ${lh.length}`);
-    for (const n of lh) assert.ok(sounding(out, 'L', n.s).length <= (level === 2 ? 1 : 2));
-    const melodyLow = Math.min(...out.filter((n) => n.h === 'R').map((n) => n.p));
-    assert.ok(Math.max(...lh.map((n) => n.p)) < melodyLow);
-    assert.deepEqual(lh.filter((n) => n.s === 0).map((n) => n.p % 12).sort(), level === 2 ? [0] : [0, 7]);   // C dur: C (+ G)
-    assert.ok(out.every((n) => n.f >= 1 && n.f <= 5));
-  }
+  const out = arrange(notes, 2);
+  const lh = out.filter((n) => n.h === 'L');
+  assert.ok(lh.length >= 4, `${lh.length}`);
+  for (const n of lh) assert.ok(sounding(out, 'L', n.s).length <= 1);
+  const melodyLow = Math.min(...out.filter((n) => n.h === 'R').map((n) => n.p));
+  assert.ok(Math.max(...lh.map((n) => n.p)) < melodyLow);
+  assert.deepEqual(lh.filter((n) => n.s === 0).map((n) => n.p % 12), [0]);   // C dur: C
+  assert.ok(out.every((n) => n.f >= 1 && n.f <= 5));
 });
 
-test('uroven 3: vedeni hlasu - horni ton leve ruky skace malo', () => {
-  // C - Am - F - G - C, kazdy akord 1 takt, melodie vysoko
-  const beat = 0.5, notes = [];
-  const prog = [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50], [48, 52, 55]];
-  prog.forEach((c, b) => {
-    c.forEach((p) => notes.push({ p, s: b * 4 * beat, e: (b + 1) * 4 * beat - 0.05, h: 'L' }));
-    for (let k = 0; k < 4; k++) notes.push({ p: 76 + (k % 2), s: (b * 4 + k) * beat, e: (b * 4 + k + 0.9) * beat, h: 'R' });
-  });
-  const out = arrange(notes, 3);
-  const firsts = onsetGroups(out.filter((n) => n.h === 'L')).map((g) => g.notes.map((n) => n.p).sort((a, b) => a - b));
-  const uppers = firsts.filter((g) => g.length === 2).map((g) => g[1]);
-  assert.ok(uppers.length >= 5);
-  const moves = uppers.slice(1).map((u, i) => Math.abs(u - uppers[i]));
-  assert.ok(Math.max(...moves) <= 4, `skoky horniho hlasu: ${moves}`);
-  // horni ton je vzdy ton akordu a ruka se vejde do oktavy
-  for (const g of firsts.filter((x) => x.length === 2)) assert.ok(g[1] - g[0] >= 3 && g[1] - g[0] <= 12, `${g}`);
-});
-
-test('uroven 4 = original, uroven 5 = original + pridane noty', () => {
+test('uroven 3 = original, 4 a 5 = original + pridane noty, ruka nikdy pres oktavu', () => {
   const { notes } = song();
-  const four = arrange(notes, 4);
-  assert.equal(four.length, notes.length);
-  const five = arrange(notes, 5);
+  assert.equal(arrange(notes, 3).length, notes.length);
   const key = (n) => `${n.p}@${n.s.toFixed(3)}`;
-  const fiveKeys = new Set(five.map(key));
-  // vsechny noty prave ruky zustanou, leva ruka se rozlozi do osmin
-  assert.ok(notes.filter((n) => n.h === 'R').every((n) => fiveKeys.has(key(n))));
-  assert.ok(five.length > notes.length);
-  assert.ok(five.some((n) => n.added));
-  for (const g of onsetGroups(five)) {
-    for (const h of ['L', 'R']) {
-      const ps = sounding(five, h, g.t).map((n) => n.p);
-      if (ps.length) assert.ok(Math.max(...ps) - Math.min(...ps) <= 12, `rozpeti ${h} @${g.t}: ${ps}`);
+  const counts = [];
+  for (const level of [4, 5]) {
+    const out = arrange(notes, level);
+    const keys = new Set(out.map(key));
+    assert.ok(notes.filter((n) => n.h === 'R').every((n) => keys.has(key(n))));   // prava ruka originalu zustane
+    assert.ok(out.some((n) => n.added));
+    for (const g of onsetGroups(out)) {
+      for (const h of ['L', 'R']) {
+        const ps = sounding(out, h, g.t).map((n) => n.p);
+        if (ps.length) assert.ok(Math.max(...ps) - Math.min(...ps) <= 12, `L${level} rozpeti ${h} @${g.t}: ${ps}`);
+      }
     }
+    counts.push(out.length);
   }
+  assert.ok(counts[1] >= counts[0]);                            // mistr ma aspon tolik not jako pokrocile
 });
 
 test('MusicXML: kazdy takt ma spravnou delku, zadna nota se neztrati', async () => {
@@ -317,4 +304,32 @@ test('prstoklad akordu podle ucebnic: zakladni tvar a obraty, staccato = presun 
   assert.equal(chord([67, 72, 76], 'R'), '135');
   // leva ruka: 2. obrat (G C E) = 5-2-1
   assert.equal(chord([55, 60, 64], 'L'), '521');
+});
+
+// ABRSM: na kterych tonech je palec (jedna oktava nahoru). Pravidlo: palec jen na bilych klavesach.
+const SCALES = {   // tonika (MIDI kolem C4), palce PR, palce LR (tridy tonu 0-11)
+  C: [60, [0, 5], [7, 0]], G: [55, [7, 0], [2, 7]], D: [62, [2, 7], [9, 2]], A: [57, [9, 2], [4, 9]],
+  E: [64, [4, 9], [11, 4]], B: [59, [11, 4], [4, 11]], F: [65, [5, 0], [0, 5]], Bb: [58, [0, 5], [2, 9]],
+  Eb: [63, [5, 0], [7, 2]], Ab: [56, [0, 5], [0, 7]], Db: [61, [5, 0], [5, 0]], Gb: [54, [11, 5], [11, 5]],
+};
+const MAJOR = [0, 2, 4, 5, 7, 9, 11, 12];             // jedna oktava nahoru       // dve oktavy, jak se stupnice cvici
+test('prstoklad: vsech 12 durovych stupnic - palec jen tam, kde ho ma ucebnice (ABRSM), nikdy na cerne', () => {
+  const bad = [];
+  for (const [name, [tonic, rh, lh]] of Object.entries(SCALES)) {
+    for (const [hand, exp, base] of [['R', rh, tonic], ['L', lh, tonic - 12]]) {
+      const notes = fingerHand(seq(MAJOR.map((i) => base + i)), hand);
+      const thumbs = [...new Set(notes.filter((n) => n.f === 1).map((n) => n.p % 12))].sort((a, b) => a - b);
+      const black = notes.filter((n) => n.f === 1 && [1, 3, 6, 8, 10].includes(n.p % 12)).length;
+      // palec jen tam, kam ho dava ucebnice (nekdy staci jeden podklad misto dvou), nikdy na cerne
+      if (!thumbs.length || thumbs.some((t) => !exp.includes(t)) || black) bad.push(`${name} ${hand}: ${notes.map((n) => n.f).join('')}`);
+    }
+  }
+  assert.deepEqual(bad, []);
+});
+
+test('nazvy not podle toniny: becka v b-tonina ch, krizky jinde', async () => {
+  const { usesFlats } = await import('../web/js/music.js');
+  assert.equal(noteName(70, 'intl', false, usesFlats({ tonic: 7, mode: 'moll' })), 'B♭');   // g moll
+  assert.equal(noteName(70, 'cz', false, usesFlats({ tonic: 5, mode: 'dur' })), 'B');        // F dur, cesky B
+  assert.equal(noteName(66, 'intl', false, usesFlats({ tonic: 4, mode: 'moll' })), 'F♯');   // e moll
 });

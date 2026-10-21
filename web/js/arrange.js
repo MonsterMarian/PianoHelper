@@ -1,21 +1,21 @@
 // Upravy skladby na ruzne obtiznosti. Teorie: teorie/04-aranzovani.md
 //
-// 1 Melodie     - jen melodie pravou rukou (bez ozdob)
-// 2 Snadne      - melodie + levou rukou jeden basovy ton na kazdy takt / zmenu akordu
-// 3 Stredni     - melodie + leva ruka bas + ton akordu (vedeni hlasu) na kazdou pulku taktu
-// 4 Original    - presne podle videa
-// 5 Pokrocile   - original + oktavy v melodii + leva ruka rozlozene akordy
+// 1 Zacatecnik  - zjednodusena melodie pravou rukou: nejvys jeden ton na dobu, hlavni tony
+// 2 Snadne      - cela melodie + levou rukou jeden basovy ton na takt
+// 3 Original    - presne podle videa (stred skaly: 2 urovne snazsi, 2 tezsi)
+// 4 Pokrocile   - original + leva ruka rozlozene akordy + pod dlouhe tony melodie ton akordu
+// 5 Mistr       - jako 4 + oktavy v melodii
 import { onsetGroups, clone, songEnd } from './music.js';
 import { estimateGrid, chordTrack, beatTimes } from './analysis.js';
 import { splitHands, rebalanceHands, MAX_SPAN } from './hands.js';
 import { fingerAll } from './fingering.js';
 
 export const LEVELS = [
-  { id: 1, name: 'Melodie', hint: 'Jen melodie pravou rukou' },
-  { id: 2, name: 'Snadné', hint: 'Melodie + basový tón na takt' },
-  { id: 3, name: 'Střední', hint: 'Melodie + dvojhlas v levé ruce' },
-  { id: 4, name: 'Originál', hint: 'Přesně podle videa' },
-  { id: 5, name: 'Pokročilé', hint: 'Oktávy v melodii + rozložené akordy' },
+  { id: 1, name: 'Začátečník', hint: 'Jen hlavní tóny melodie, nejvýš jeden na dobu' },
+  { id: 2, name: 'Snadné', hint: 'Celá melodie + basový tón na takt' },
+  { id: 3, name: 'Originál', hint: 'Přesně podle videa' },
+  { id: 4, name: 'Pokročilé', hint: 'Rozložené akordy vlevo + harmonie pod melodií' },
+  { id: 5, name: 'Mistr', hint: 'Jako pokročilé + oktávy v melodii' },
 ];
 
 /**
@@ -44,6 +44,34 @@ export function extractMelody(notes, grid) {
   });
 }
 
+/**
+ * Zjednodusena melodie (uroven 1): v kazde dobe jen jeden ton - ten, ktery zacina na dobe a je
+ * nejdelsi (hlavni ton); rychle behy, prirazy a synkopy mezi dobami zmizi. Ton drzi do dalsiho.
+ */
+export function simplifyMelody(melody, grid, end) {
+  const beats = beatTimes(grid, end);
+  const T = grid.beat;
+  // u rychlych skladeb jeden ton na pul taktu / takt: mezi tony aspon 0.6 s
+  let step = 1;
+  while (step < grid.meter && step * T < 0.6) step = grid.meter % 2 === 0 && step * 2 <= grid.meter ? step * 2 : grid.meter;
+  const kept = [];
+  for (let i = 0; i + step < beats.length; i += step) {
+    const a = beats[i] - 0.15 * T, b = beats[i + step] - 0.15 * T;
+    let best = null;
+    for (const n of melody) {
+      if (n.s < a || n.s >= b) continue;
+      const score = (Math.abs(n.s - beats[i]) < 0.15 * T ? 1 : 0) + Math.min(n.e, beats[i + step]) - n.s;
+      if (!best || score > best.score) best = { n, score };
+    }
+    if (best) kept.push(best.n);
+  }
+  return kept.map((n, i) => {
+    const next = kept[i + 1];
+    const e = next ? Math.max(n.s + 0.1, Math.min(Math.max(n.e, n.s + T * step * 0.9), next.s - 0.02)) : n.e;
+    return { p: n.p, s: n.s, e, h: 'R' };
+  });
+}
+
 // Ton akordu v rozsahu [lo, hi] co nejbliz cili.
 function placeInRange(pc, lo, hi, target) {
   let best = null;
@@ -59,27 +87,14 @@ function bassFor(notes, chord, a, b, ceiling, prev) {
   return placeInRange(chord.root, 36, Math.min(ceiling, 59), prev ?? (low ? low.p : 48));
 }
 
-// Horni ton leve ruky (uroven 3): ton akordu 3-12 pultonu nad basem, co nejbliz predchozimu
-// hornimu tonu (vedeni hlasu); bez predchoziho kvinta. Kvinta ma malou prednost.
-function upperFor(chord, bass, ceiling, prev) {
-  let best = null;
-  for (let p = bass + 3; p <= Math.min(bass + 12, ceiling); p++) {
-    if (!chord.tones.includes(p % 12)) continue;
-    const isFifth = (p - chord.root + 120) % 12 === 7;
-    const cost = (prev === null ? 0 : Math.abs(p - prev)) - (isFifth ? 0.5 : 0) + (prev === null && !isFifth ? 5 : 0);
-    if (!best || cost < best.cost) best = { p, cost };
-  }
-  return best ? best.p : null;
-}
-
-function leftHandSimple(notes, melody, grid, end, { fifths, perBar }) {
+function leftHandSimple(notes, melody, grid, end) {
   const chords = chordTrack(notes, grid, end);
   const beats = beatTimes(grid, end);
   const out = [];
-  // Snadne: ton na kazdy takt; Stredni: na kazdou pulku taktu (ve 3/4 na takt). Plus kazda zmena akordu.
+  // ton na kazdy takt + zmena akordu delsi nez 2 doby.
   // Doby jsou pole casu (tempo se muze menit), beats[0] je prvni doba taktu.
-  const unit = perBar || grid.meter % 2 ? grid.meter : 2;
-  let prevBass = null, prevUpper = null;
+  const unit = grid.meter;
+  let prevBass = null;
   for (const ch of chords) {
     const ei = beats.indexOf(ch.e);
     const slots = [ch.si];
@@ -87,18 +102,15 @@ function leftHandSimple(notes, melody, grid, end, { fifths, perBar }) {
     for (let k = 0; k < slots.length; k++) {
       const a = beats[slots[k]], b = k + 1 < slots.length ? beats[slots[k + 1]] : ch.e;
       // kratka zmena akordu uprostred taktu je pro zacatecnika zbytecna
-      if (perBar && k === 0 && ch.si % unit !== 0 && ei - ch.si < 2) continue;
+      if (k === 0 && ch.si % unit !== 0 && ei - ch.si < 2) continue;
       // leva ruka nesmi prekryt melodii: strop = nejnizsi melodicky ton v okne - 3
       const mel = melody.filter((m) => m.s < b && m.e > a).map((m) => m.p);
       const ceiling = (mel.length ? Math.min(...mel) : 72) - 3;
-      const bass = bassFor(notes, ch, a, b, ceiling - (fifths ? 3 : 0), prevBass);
+      const bass = bassFor(notes, ch, a, b, ceiling, prevBass);
       if (bass === null) continue;
       const dur = Math.max(0.1, b - a - 0.02);
       out.push({ p: bass, s: a, e: a + dur, h: 'L' });
       prevBass = bass;
-      if (!fifths) continue;
-      const upper = upperFor(ch, bass, ceiling, prevUpper);
-      if (upper !== null) { out.push({ p: upper, s: a, e: a + dur, h: 'L' }); prevUpper = upper; }
     }
   }
   // preskocena kratka zmena akordu nesmi nechat diru: ton drzi do dalsiho basu, nejdele takt
@@ -120,33 +132,23 @@ function eighthsIn(beats, a, b) {
   return [a, ...out];
 }
 
-// Pokrocile: oktavove zdvojeni melodie na dlouhych tonech + rozlozene akordy v leve ruce.
-function advanced(notes, grid, end) {
-  const out = clone(notes);
-  const melody = extractMelody(notes, grid);
-  const melodySet = new Set(melody.map((m) => `${m.p}@${m.s.toFixed(3)}`));
-  for (const n of notes) {
-    if (n.h === 'L' || !melodySet.has(`${n.p}@${n.s.toFixed(3)}`) || n.e - n.s < grid.beat * 0.9) continue;
-    const others = notes.filter((o) => o !== n && o.h !== 'L' && o.s < n.e && o.e > n.s).map((o) => o.p);
-    const low = n.p - 12;
-    if (others.some((p) => p < low) || others.some((p) => p === low)) continue;
-    if (others.length && Math.max(n.p, ...others) - low > MAX_SPAN) continue;
-    out.push({ p: low, s: n.s, e: n.e, h: 'R', added: true });
-  }
-
-  // drzene noty leve ruky (>= 2 doby) -> rozlozeny akord v osminach: zaklad, kvinta, oktava, kvinta
+// Pokrocile / Mistr: drzene basy v leve ruce -> rozlozene akordy; pak v prave ruce pod dlouhe
+// tony melodie ton akordu (tercie/sexta), u Mistra navic oktava - jen nad levou rukou, at se ruce nesrazi.
+function advanced(notes, grid, end, { octaves }) {
   const chords = chordTrack(notes, grid, end);
   const beats = beatTimes(grid, end);
+  const chordAt = (t) => chords.find((c) => c.s <= t + 0.05 && c.e > t + 0.05);
+
+  // 1) leva ruka: drzena nota (>= 2 doby) -> osminy zaklad, kvinta, oktava, kvinta
   const result = [];
-  for (const n of out) {
-    if (n.h !== 'L' || n.e - n.s < grid.beat * 2 || n.added) { result.push(n); continue; }
-    const others = out.filter((o) => o !== n && o.h === 'L' && o.s < n.e && o.e > n.s);
-    if (others.some((o) => o.p < n.p)) { result.push(n); continue; }   // jen nejnizsi (basovy) ton
-    const ch = chords.find((c) => c.s <= n.s + 0.05 && c.e > n.s + 0.05);
-    if (!ch || !ch.tones.includes(n.p % 12)) { result.push(n); continue; }
-    const top = Math.min(...out.filter((o) => o.h !== 'L' && o.s < n.e && o.e > n.s).map((o) => o.p), 84);
-    const fifthPc = (ch.root + 7) % 12;
-    const fifth = placeInRange(fifthPc, n.p + 1, n.p + 11, n.p + 7);
+  for (const n of notes) {
+    if (n.h !== 'L' || n.e - n.s < grid.beat * 2) { result.push({ ...n }); continue; }
+    const others = notes.filter((o) => o !== n && o.h === 'L' && o.s < n.e && o.e > n.s);
+    if (others.some((o) => o.p < n.p)) { result.push({ ...n }); continue; }   // jen nejnizsi (basovy) ton
+    const ch = chordAt(n.s);
+    if (!ch || !ch.tones.includes(n.p % 12)) { result.push({ ...n }); continue; }
+    const top = Math.min(...notes.filter((o) => o.h !== 'L' && o.s < n.e && o.e > n.s).map((o) => o.p), 84);
+    const fifth = placeInRange((ch.root + 7) % 12, n.p + 1, n.p + 11, n.p + 7);
     const pattern = [n.p, fifth, n.p + 12, fifth].map((p) => (p !== null && p < top - 2 ? p : null));
     const times = eighthsIn(beats, n.s, n.e);
     times.forEach((t, k) => {
@@ -156,6 +158,23 @@ function advanced(notes, grid, end) {
       if (k > 0 && others.some((o) => o.p === p && o.s < next && o.e > t)) return;
       result.push({ p, s: t, e: t + (next - t) * 0.95, h: 'L', added: k > 0 });
     });
+  }
+
+  // 2) prava ruka: harmonie (a oktava) pod dlouhe tony melodie
+  const melody = extractMelody(notes, grid);
+  const melodySet = new Set(melody.map((m) => `${m.p}@${m.s.toFixed(3)}`));
+  for (const n of notes) {
+    if (n.h === 'L' || !melodySet.has(`${n.p}@${n.s.toFixed(3)}`) || n.e - n.s < grid.beat * 0.9) continue;
+    const others = result.filter((o) => o.p !== n.p && o.h !== 'L' && o.s < n.e && o.e > n.s).map((o) => o.p);
+    const lhTop = Math.max(-1, ...result.filter((o) => o.h === 'L' && o.s < n.e && o.e > n.s).map((o) => o.p));
+    const fits = (p) => p > lhTop + 2 && !others.includes(p) && !others.some((o) => o < p && o > n.p - 13) &&
+      Math.max(n.p, ...others) - Math.min(p, ...others) <= MAX_SPAN;
+    const ch = chordAt(n.s);
+    if (ch) {
+      const cand = [n.p - 3, n.p - 4, n.p - 8, n.p - 9, n.p - 5].find((p) => ch.tones.includes(((p % 12) + 12) % 12) && fits(p));
+      if (cand !== undefined) { result.push({ p: cand, s: n.s, e: n.e, h: 'R', added: true }); others.push(cand); }
+    }
+    if (octaves && fits(n.p - 12)) result.push({ p: n.p - 12, s: n.s, e: n.e, h: 'R', added: true });
   }
   return result;
 }
@@ -169,11 +188,11 @@ export function arrange(notes, level, grid = null) {
   const end = songEnd(base);
   grid = grid || estimateGrid(base);
   let out;
-  if (level === 1) out = extractMelody(base, grid);
-  else if (level === 2 || level === 3) {
+  if (level === 1) out = simplifyMelody(extractMelody(base, grid), grid, end);
+  else if (level === 2) {
     const melody = extractMelody(base, grid);
-    out = [...melody, ...leftHandSimple(base, melody, grid, end, { fifths: level === 3, perBar: level === 2 })];
-  } else if (level === 5) out = advanced(base, grid, end);
+    out = [...melody, ...leftHandSimple(base, melody, grid, end)];
+  } else if (level === 4 || level === 5) out = advanced(base, grid, end, { octaves: level === 5 });
   else out = base;
   out.sort((a, b) => a.s - b.s || a.p - b.p);
   rebalanceHands(out);

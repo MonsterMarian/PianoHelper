@@ -62,17 +62,20 @@ export function stepCost(fa, qa, pa, fb, qb, pb, gap = 0, shape = false) {
   if (lo === 1 && span < 0) {                                             // pravidlo 12: podklad/prekladani palce
     const thumbBlack = fa === 1 ? bA : bB, otherBlack = fa === 1 ? bB : bA;
     c += 0.5;                                                             // kazdy podklad je namaha -> co nejmene
-    if (thumbBlack === otherBlack) c += 1;
+    if (thumbBlack === otherBlack) c += 2;                               // bila->bila: nejtezsi podklad; z cerne na bilou je prirozeny
     else if (thumbBlack) c += 3;
   }
   return c;
 }
 
 // Cena jedne noty (nezavisla na sousedech).
-export function noteCost(f, p) {
+// Palec a malicek patri na bile klavesy, 2-3-4 na cerne (Yamaha, pianoscales.org). Vyjimka:
+// v akordech a oktavach je palec na cerne bezny (B dur kvintakord), proto tam jen mirne.
+export function noteCost(f, p, inChord = false) {
   let c = 0;
   if (f === 4 || f === 5) c += 0.5;          // pravidlo 6: slabe prsty (Parncutt: 1; 0.5 = radsi poloha nez prekladani)
-  if (f === 1 && isBlack(p)) c += 1;                                      // pravidlo 10: palec na cerne
+  if (f === 1 && isBlack(p)) c += inChord ? 1 : 4;                        // pravidlo 10: palec na cerne
+  if (f === 5 && isBlack(p) && !inChord) c += 1;                          // malicek na cerne
   return c;
 }
 
@@ -124,7 +127,7 @@ function verticalCost(fs, qs, ps) {
   if (tb && tb.some((f, i) => f !== fs[i])) c += fs.length === 3 ? 2 : 1;   // jiny nez ucebnicovy tvar
   for (let i = 0; i < fs.length; i++) {
     // malicek na krajni note akordu je prirozeny (C-E-G = 1-3-5), slaby prst se pocita jen u 4
-    c += noteCost(fs[i], ps[i]) - (fs.length > 1 && fs[i] === 5 ? 0.5 : 0);
+    c += noteCost(fs[i], ps[i], fs.length > 1) - (fs.length > 1 && fs[i] === 5 ? 0.5 : 0);
     for (let j = i + 1; j < fs.length; j++) c += spanCost(fs[i], fs[j], qs[j] - qs[i], { relaxed: j === i + 1 });
   }
   return c;
@@ -146,6 +149,22 @@ export function fingerHand(notes, hand) {
     const qs = ns.map((n) => mirror * n.p), ps = ns.map((n) => n.p);
     const opts = chordFingerings(ns.length).map((fs) => ({ fs, cost: verticalCost(fs, qs, ps) }));
     return { t: g.t, end: Math.max(...ns.map((n) => n.e)), ns, qs, ps, opts };
+  });
+
+  // Malicek patri na zacatek, konec nebo bod obratu pasaze (R. Kelley: "starting place, stopping
+  // place, turning-around place"). Krajni (nejvyssi v zrcadlenych souradnicich) ton tam s prstem 5
+  // nestoji nic - jinak by model zacinal levou rukou C dur ctyrkou, aby usetril "slaby prst".
+  events.forEach((ev, i) => {
+    if (ev.ns.length !== 1) return;
+    const prev = events[i - 1], next = events[i + 1];
+    const startEdge = !prev || ev.t - prev.end > 0.5;
+    const endEdge = !next || next.t - ev.end > 0.5;
+    const q = ev.qs[0];
+    const above = (o) => !o || o.ns.length !== 1 || q >= o.qs[0];
+    const turn = prev && next && prev.ns.length === 1 && next.ns.length === 1 && q > prev.qs[0] && q > next.qs[0];
+    if ((startEdge && above(next)) || (endEdge && above(prev)) || turn) {
+      if (!isBlack(ev.ps[0])) for (const o of ev.opts) if (o.fs[0] === 5) o.cost -= 1;   // malicek jen na bile
+    }
   });
 
   // Prechod mezi udalostmi A -> B: kazda nota B se porovna s notou A, ktera ma stejny prst,

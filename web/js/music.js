@@ -11,8 +11,22 @@ const NAMES = {
   solfege: ['Do', 'Do♯', 'Re', 'Re♯', 'Mi', 'Fa', 'Fa♯', 'Sol', 'Sol♯', 'La', 'La♯', 'Si'],
 };
 
-export function noteName(p, system = 'intl', withOctave = false) {
-  const n = NAMES[system][((p % 12) + 12) % 12];
+// Tvary s becky pro toniny s predznamenanim b (F, B, Es... dur / d, g, c... moll).
+const FLATS = {
+  intl: ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B♭', 'B'],
+  cz: ['C', 'D♭', 'D', 'E♭', 'E', 'F', 'G♭', 'G', 'A♭', 'A', 'B', 'H'],
+  solfege: ['Do', 'Re♭', 'Re', 'Mi♭', 'Mi', 'Fa', 'Sol♭', 'Sol', 'La♭', 'La', 'Si♭', 'Si'],
+};
+
+// Ma tonina predznamenani s becky? (tonic 0-11, mode 'dur' | 'moll')
+export function usesFlats(key) {
+  if (!key) return false;
+  const major = key.mode === 'dur' ? key.tonic : (key.tonic + 3) % 12;
+  return [5, 10, 3, 8, 1, 6].includes(major);
+}
+
+export function noteName(p, system = 'intl', withOctave = false, flats = false) {
+  const n = (flats ? FLATS : NAMES)[system][((p % 12) + 12) % 12];
   return withOctave ? n + (Math.floor(p / 12) - 1) : n;
 }
 

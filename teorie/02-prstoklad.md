@@ -63,7 +63,22 @@ palec pod/přes prst.
 | – | souzvuk jinak než podle učebnice | 2 (trojzvuk) / 1 (dvojzvuk) |
 | – | mimo MaxPrac / MinPrac (nehratelné) | 50 |
 
-### Kde se model liší od Parncutta (a proč)
+### Pravidla pro černé a bílé klávesy (rešerše)
+
+- Palec a malíček patří na bílé klávesy, dlouhé prsty 2–3–4 na černé
+  ([Yamaha](https://hub.yamaha.com/keyboards/k-how-to/the-basics-of-piano-keyboard-fingering/),
+  [pianoscales.org](https://www.pianoscales.org/fingerings.html)). V modelu palec na černé v melodii
+  4 body, malíček na černé 1 bod.
+- **Výjimka: akordy a oktávy.** Tam je palec na černé běžný (kvintakord B♭ dur), proto jen 1 bod.
+- **Malíček na začátek, konec nebo obrat** pasáže
+  ([R. Kelley](https://robertkelleyphd.com/home/arpfing.htm)). Krajní tón tam s malíčkem nic nestojí.
+- Podklad palce je nejpřirozenější z černé klávesy na bílou; z bílé na bílou (E→F v C dur)
+  stojí víc (2 + 0,5 bodu).
+
+Test: **všech 12 durových stupnic v obou rukou**. Palec smí být jen na tónech, kde ho mají
+učebnice (ABRSM), a nikdy na černé. Výsledek: 24/24 (1 oktáva).
+
+## Kde se model liší od Parncutta (a proč)
 
 Původní váhy byly ověřené na krátkých melodiích. Na stupnicích ale vybíraly nesmysly, proto jsou
 upravené. Každá změna má test v `tests/theory.test.mjs`:

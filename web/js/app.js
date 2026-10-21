@@ -1,9 +1,9 @@
 import { arrange, LEVELS } from './arrange.js';
 import { estimateGrid, chordTrack, detectKey } from './analysis.js';
-import { Player } from './audio.js';
-import { draw, drawOverview, drawBars, drawKeyMap, layoutKeys, keyRange, HANDLE } from './render.js';
+import { Player, PIANOS } from './audio.js';
+import { draw, drawOverview, drawBars, drawKeyMap, layoutKeys, keyRange, HANDLE, resetColors } from './render.js';
 import { barTimes, barAt, loopBars, loopFromTimes, shiftLoop } from './loop.js';
-import { songEnd, noteName, isBlack } from './music.js';
+import { songEnd, noteName, isBlack, usesFlats } from './music.js';
 import { toMusicXML } from './musicxml.js';
 import { keyboardInput, midiInput } from './input.js';
 import { fingerTargets } from './hands.js';
@@ -14,10 +14,13 @@ window.pianoHelper = { player };          // pro ladeni v konzoli a testy
 
 // Nastaveni uzivatele (jen pohodli; bez localStorage vse funguje s vychozimi hodnotami)
 const prefs = (() => { try { return JSON.parse(localStorage.getItem('pianohelper') || '{}'); } catch { return {}; } })();
+// obtiznosti 2.0: originál je uroven 3 (driv 4) - prevest ulozenou volbu
+if (prefs.level && !prefs.levels2) { prefs.level = { 1: 1, 2: 2, 3: 2, 4: 3, 5: 5 }[prefs.level] || 3; }
+prefs.levels2 = true;
 const savePrefs = () => { try { localStorage.setItem('pianohelper', JSON.stringify(prefs)); } catch { /* soukrome okno */ } };
 
 const state = {
-  title: '', file: '', base: [], grid: null, chords: [], key: null, level: prefs.level ?? 4,
+  title: '', file: '', base: [], grid: null, chords: [], key: null, level: prefs.level ?? 3,
   notes: [], cache: new Map(), duration: 0, lo: 48, hi: 84, loop: null, loopOn: false,
   library: [], pressed: new Map(), octave: prefs.octave ?? 4,
   range: prefs.range ?? '61', custom: prefs.custom ?? null, songLo: 60, songHi: 72, bars: [0, 1],
@@ -107,6 +110,7 @@ function applyLevel() {
   state.bars = barTimes(state.grid, Math.max(state.duration, songEnd(state.base)));
   if (state.loop) setLoop(state.loop.from, state.loop.to, state.loopOn);
   for (const b of $('levels').children) b.setAttribute('aria-pressed', String(Number(b.dataset.level) === state.level));
+  $('level-name').textContent = LEVELS.find((l) => l.id === state.level).name;
 }
 
 // Viditelny vyrez klaviatury (61 klaves jako ve videich, nebo co si uzivatel zvoli)
@@ -244,8 +248,9 @@ for (const l of LEVELS) {
   const b = document.createElement('button');
   b.type = 'button';
   b.dataset.level = l.id;
-  b.title = `${l.hint} (${l.id})`;
-  b.innerHTML = `<b>${l.id}</b><small>${l.name}</small>`;
+  b.title = `${l.name} — ${l.hint} (${l.id})`;
+  b.innerHTML = `<b>${l.id}</b>`;
+  b.setAttribute('aria-label', `${l.id} ${l.name}: ${l.hint}`);
   b.addEventListener('click', () => setLevel(l.id));
   $('levels').append(b);
 }
@@ -491,9 +496,64 @@ const bindCheck = (id, key, def, fn) => {
   el.addEventListener('change', () => { prefs[key] = el.checked; savePrefs(); fn?.(); });
   fn?.();
 };
-bindCheck('letters', 'letters', true);
+bindCheck('letters', 'letters', true, () => { $('letters-set').checked = $('letters').checked; });
+$('letters-set').addEventListener('change', () => { $('letters').checked = $('letters-set').checked; $('letters').dispatchEvent(new Event('change')); });
 bindCheck('fingers', 'fingers', false);
-bindCheck('hand-pos', 'handPos', true);
+bindCheck('hand-pos', 'handPos', true, () => { $('hand-pos-set').checked = $('hand-pos').checked; });
+$('hand-pos-set').addEventListener('change', () => { $('hand-pos').checked = $('hand-pos-set').checked; $('hand-pos').dispatchEvent(new Event('change')); });
+
+// predstih ukazatele prstu (s)
+const ahead = () => Number($('finger-ahead').value);
+$('finger-ahead').value = prefs.ahead ?? 1.5;
+const syncAhead = () => { $('ahead-out').textContent = `${String(ahead()).replace('.', ',')} s`; };
+$('finger-ahead').addEventListener('input', () => { prefs.ahead = ahead(); savePrefs(); syncAhead(); });
+syncAhead();
+
+// barvy not (tmavsi odstin pro cerne klavesy se dopocita)
+const darker = (hex, k = 0.72) => '#' + [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * k).toString(16).padStart(2, '0')).join('');
+const COLOR_DEFAULT = { R: '#f2b134', L: '#4fc4b8' };
+function applyColors() {
+  const col = { ...COLOR_DEFAULT, ...(prefs.colors || {}) };
+  const root = document.documentElement.style;
+  root.setProperty('--rh', col.R); root.setProperty('--rh-deep', darker(col.R));
+  root.setProperty('--lh', col.L); root.setProperty('--lh-deep', darker(col.L));
+  $('color-r').value = col.R; $('color-l').value = col.L;
+  resetColors();
+}
+for (const [id, h] of [['color-r', 'R'], ['color-l', 'L']]) {
+  $(id).addEventListener('input', () => { prefs.colors = { ...(prefs.colors || {}), [h]: $(id).value }; savePrefs(); applyColors(); });
+}
+$('color-reset').addEventListener('click', () => { delete prefs.colors; savePrefs(); applyColors(); });
+applyColors();
+
+// zvuk piana
+for (const pn of PIANOS) $('piano').append(new Option(pn.name, pn.id));
+player.piano = PIANOS.some((x) => x.id === prefs.piano) ? prefs.piano : 'salamander';
+$('piano').value = player.piano;
+$('piano').addEventListener('change', async () => {
+  prefs.piano = $('piano').value; savePrefs();
+  $('piano-status').textContent = 'Načítám zvuk…';
+  player.ensureContext();
+  const n = await player.setPiano(prefs.piano);
+  $('piano-status').textContent = n ? 'Načteno.' : '';
+});
+$('piano-test').addEventListener('click', async () => {
+  player.ensureContext();
+  await player.ctx.resume();
+  await player.loadSamples();
+  const t = player.ctx.currentTime + 0.05;
+  [60, 64, 67, 72].forEach((p, i) => player.noteOn(p, t + i * 0.12, 1.4 - i * 0.12, 0.7));
+});
+
+// zobrazit jen jednu ruku (jen vzhled - zvuk se nemeni)
+state.showHand = prefs.showHand || 'both';
+function setShowHand(h) {
+  state.showHand = h; prefs.showHand = h; savePrefs();
+  for (const b of $('show-hand').children) b.setAttribute('aria-pressed', String(b.dataset.hand === h));
+}
+for (const b of $('show-hand').children) b.addEventListener('click', () => setShowHand(b.dataset.hand));
+setShowHand(state.showHand);
+const viewNotes = () => (state.showHand === 'both' ? state.notes : state.notes.filter((n) => (n.h === 'L' ? 'L' : 'R') === state.showHand));
 bindCheck('echo', 'echo', true);
 bindCheck('mine-r', 'mineR', false, () => player.setMute('R', $('mine-r').checked));
 bindCheck('mine-l', 'mineL', false, () => player.setMute('L', $('mine-l').checked));
@@ -562,19 +622,20 @@ function frame() {
   const canvas = $('stage');
   if (state.notes.length) {
     const waiting = player.waitOn && player.playing ? player.waiting : null;
+    const shown = viewNotes();
     state.lookahead = draw(canvas, {
-      now, notes: state.notes, range: [state.lo, state.hi],
+      now, notes: shown, range: [state.lo, state.hi], ahead: ahead(), flats: usesFlats(state.key),
       widthFrac: view.width / 100, pps: view.pps, fallFrac: view.fall / 100, kbFrac: view.kb / 100,
       showLetters: $('letters').checked, naming: $('naming').value,
       showFingers: $('fingers').checked, loop: state.loopOn ? state.loop : null,
       mine: { L: $('mine-l').checked, R: $('mine-r').checked }, pressed: state.pressed, waiting,
-      targets: $('hand-pos').checked ? fingerTargets(state.notes, now) : null,
+      targets: $('hand-pos').checked ? fingerTargets(shown, now, ahead()) : null,
     }).lookahead;
     clampView();
     if (!drag && !ovDrag && performance.now() > tlView.manualUntil) showInTimeline(now);
     const t1 = tlView.t0 + tlView.span;
-    drawBars(tl, { notes: state.notes, bars: state.bars, meter: state.grid.meter, t0: tlView.t0, t1, now, loop: state.loop, loopOn: state.loopOn, lo: state.songLo, hi: state.songHi });
-    drawOverview(ov, { notes: state.notes, duration: state.duration, now, loop: state.loop, loopOn: state.loopOn, t0: tlView.t0, t1, lo: state.songLo, hi: state.songHi });
+    drawBars(tl, { notes: shown, bars: state.bars, meter: state.grid.meter, t0: tlView.t0, t1, now, loop: state.loop, loopOn: state.loopOn, lo: state.songLo, hi: state.songHi });
+    drawOverview(ov, { notes: shown, duration: state.duration, now, loop: state.loop, loopOn: state.loopOn, t0: tlView.t0, t1, lo: state.songLo, hi: state.songHi });
     drawKeyMap(km, { lo: state.lo, hi: state.hi, songLo: state.songLo, songHi: state.songHi });
     $('time').firstChild.textContent = fmt(now);
     $('time').lastChild.textContent = `/ ${fmt(state.duration)}`;
@@ -586,7 +647,7 @@ function frame() {
     const name = ch ? ch.name : '';
     if (name !== lastChord) { $('chord').textContent = name; lastChord = name; }
     $('wait-hud').hidden = !waiting;
-    if (waiting) $('wait-notes').textContent = [...waiting.pitches].sort((a, b) => a - b).map((p) => noteName(p, $('naming').value)).join(' ');
+    if (waiting) $('wait-notes').textContent = [...waiting.pitches].sort((a, b) => a - b).map((p) => noteName(p, $('naming').value, false, usesFlats(state.key))).join(' ');
   }
   requestAnimationFrame(frame);
 }

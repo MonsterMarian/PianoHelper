@@ -8,11 +8,20 @@ pohybuje. Melodie (to, co si člověk zpívá) ale zůstává.**
 
 | úroveň | pravá ruka | levá ruka | pro koho |
 |---|---|---|---|
-| 1 Melodie | jen melodie | nic | první seznámení, nácvik melodie |
-| 2 Snadné | melodie | 1 basový tón na takt (a při změně akordu delší než 2 doby) | začátečník, obě ruce |
-| 3 Střední | melodie | bas + tón akordu s vedením hlasů na každou půlku taktu (ve 3/4 na takt) | mírně pokročilý |
-| 4 Originál | jak ve videu | jak ve videu | — |
-| 5 Pokročilé | + oktávy pod dlouhými tóny melodie | držené basy → rozložené akordy v osminách | pokročilý |
+| 1 Začátečník | hlavní tóny melodie: jeden na dobu, u rychlých skladeb na půl taktu (≥ 0,6 s od sebe) | nic | první seznámení |
+| 2 Snadné | celá melodie (bez ozdob) | 1 basový tón na takt (a při změně akordu ≥ 2 doby) | začátečník, obě ruce |
+| **3 Originál** | jak ve videu | jak ve videu | — |
+| 4 Pokročilé | + tón akordu (tercie/sexta) pod dlouhé tóny melodie | držené basy → rozložené akordy v osminách | pokročilý |
+| 5 Mistr | jako 4 + oktávy pod melodií | jako 4 | pokročilý+ |
+
+Originál je uprostřed (2 úrovně snazší, 2 těžší). Dřív byla „Melodie“ úroveň 1, ale u skladeb,
+kde pravá ruka hraje jen melodii (Jujutsu Kaisen), byla skoro stejně těžká jako originál. Proto
+úroveň 1 melodii zjednodušuje rytmicky: v každé době (u rychlých skladeb v každé půlce taktu)
+zůstane jen tón, který začíná na době a je nejdelší. Kaikai Kitan (161 BPM): úroveň 1 = 1,2 noty/s,
+originál 5,1 noty/s.
+
+Při stavbě úrovní 4 a 5 jdou nejdřív rozložené akordy v levé ruce, pak doplňky pravé ruky,
+a ty jen nad levou rukou, aby se ruce nesrazily.
 
 ## Kroky
 
@@ -36,26 +45,13 @@ Podle mřížky z [01-analyza.md](01-analyza.md) a akordů:
   i obraty), jinak **základ akordu** v rozsahu C2–B3,
 - strop = nejnižší tón melodie v daném úseku − 3 půltóny, aby se ruce nesrazily.
 
-### Dvojhlas s vedením hlasů (úroveň 3)
-
-Jako úroveň 2, ale slot je půlka taktu a k basu přibude **jeden tón akordu** 3–12 půltónů nad
-basem (a pod melodií):
-
-- první akord: kvinta (stejný tvar ruky u dur i moll, prsty 5 + 1 nebo 5 + 2),
-- další akordy: tón akordu **nejblíž předchozímu hornímu tónu** (vedení hlasů,
-  „nejkratší cesta“). Ruka se tak skoro nehýbe; kvinta má při shodě malou přednost,
-- bas, pokud se nebere z originálu, se posadí do oktávy nejblíž předchozímu basu.
-
-Příklad C – Am – F – G – C: horní hlas G – A – A – G – G místo kvint G – E – C – D – G.
-Skoky max. 2 půltóny místo 5.
-
-### Držení basu (úrovně 2 a 3)
+### Držení basu (úroveň 2)
 
 Každý tón levé ruky drží až do dalšího tónu levé ruky (nejdéle takt, nejdéle do konce
 skladby). Přeskočená krátká změna akordu uprostřed taktu tak nenechá díru: v notách jsou celé
 noty, žádné pomlky.
 
-### Ozdoby (úroveň 5)
+### Ozdoby (úrovně 4 a 5)
 
 - **Oktávy:** pod tón melodie delší než ~1 doba se přidá tón o oktávu níž, pokud pod ním
   v pravé ruce nic není a ruka se vejde do oktávy.
