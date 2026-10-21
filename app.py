@@ -136,8 +136,7 @@ with st.sidebar:
     st.markdown("### ⚙️ Configuration")
 
     tempo = st.slider("Tempo (BPM)", 40, 200, 120, help="MIDI playback speed")
-    min_pixels = st.slider("Min Pixels", 10, 100, 25, help="Minimum pixel count for a detected note")
-    frame_skip = st.slider("Frame Skip", 1, 5, 2, help="Analyse every N-th frame (lower = more accurate)")
+    frame_skip = st.slider("Frame Skip", 1, 5, 1, help="Analyse every N-th frame (1 = every frame, needed for repeated notes)")
     notes_per_staff = st.slider("Notes per Staff", 8, 32, 16, help="How many notes fit on one staff line")
     min_note_duration = st.slider(
         "Min Note Duration (s)", 0.02, 0.20, 0.05, step=0.01,
@@ -145,12 +144,11 @@ with st.sidebar:
     )
 
     st.markdown("---")
-    st.markdown("### 🎹 Video Mode")
-    video_mode = st.selectbox(
-        "Detection mode",
-        options=["auto", "synthesia", "real_piano", "tutorial", "generic"],
-        help="auto = detect from video; real_piano = brightness change tracking; tutorial = notes on top"
-    )
+    st.markdown("### 🎹 Keyboard")
+    start_note = st.text_input(
+        "First white key (optional)", value="",
+        help="e.g. E2 - leftmost white key of the video keyboard; empty = automatic (keyboard center + audio)"
+    ).strip() or None
 
     st.markdown("---")
     st.markdown("### 🎵 Audio Processing")
@@ -330,9 +328,8 @@ if process_btn and st.session_state.video_info is not None:
             # Video detection path
             config = mods["DetectorConfig"](
                 frame_skip=frame_skip,
-                min_note_pixels=min_pixels,
                 min_note_duration=min_note_duration,
-                video_mode=video_mode,
+                start_note_override=start_note,
             )
 
             def _progress(pct, msg):
@@ -344,9 +341,8 @@ if process_btn and st.session_state.video_info is not None:
             if not notes:
                 raise RuntimeError(
                     "No notes detected. Try:\n"
-                    "- Switch video mode (e.g. 'real_piano' for real piano videos)\n"
-                    "- Enable 'Use audio→MIDI' for videos with audio\n"
-                    "- Lower Min Pixels or Frame Skip"
+                    "- The video must show a keyboard with falling notes (Synthesia style)\n"
+                    "- Enable 'Use audio→MIDI' for videos with audio"
                 )
 
         st.session_state.notes = notes

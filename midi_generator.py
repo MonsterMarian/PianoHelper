@@ -5,7 +5,10 @@ import mido
 from mido import Message, MidiFile, MidiTrack
 from typing import List
 from note_detector import DetectedNote
+import json
 import os
+import re
+import unicodedata
 
 
 def notes_to_midi(
@@ -30,51 +33,35 @@ def notes_to_midi(
     """
     os.makedirs(os.path.dirname(output_path) if os.path.dirname(output_path) else '.', exist_ok=True)
     
-    mid = MidiFile(ticks_per_beat=ticks_per_beat)
-    track = MidiTrack()
-    mid.tracks.append(track)
-    
-    # Metadata
-    track.append(mido.MetaMessage('track_name', name=title, time=0))
-    track.append(mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(tempo), time=0))
-    
-    if not notes:
-        mid.save(output_path)
-        return output_path
-    
-    # Vytvorit seznam udalosti (note_on, note_off)
-    events = []
-    for note in notes:
-        start_tick = int(note.start_time * ticks_per_beat * tempo / 60)
-        end_tick = int(note.end_time * ticks_per_beat * tempo / 60)
-        
-        # Zajistit minimalni delku noty
-        if end_tick <= start_tick:
-            end_tick = start_tick + 1
-        
-        events.append(('note_on', start_tick, note.midi_note, note.velocity))
-        events.append(('note_off', end_tick, note.midi_note, 0))
-    
-    # Seradit podle casu, note_off pred note_on pri stejnem casu
-    events.sort(key=lambda e: (e[1], 0 if e[0] == 'note_off' else 1))
-    
-    # Konvertovat na delta casy
-    last_tick = 0
-    for event_type, tick, midi_note, velocity in events:
-        delta = tick - last_tick
-        if delta < 0:
-            delta = 0
-        
-        if event_type == 'note_on':
-            track.append(Message('note_on', note=midi_note, velocity=velocity, time=delta))
-        else:
-            track.append(Message('note_off', note=midi_note, velocity=0, time=delta))
-        
-        last_tick = tick
-    
-    # Konec skladby
-    track.append(mido.MetaMessage('end_of_track', time=0))
-    
+    # Ruce zname -> dve stopy (prava, leva), jinak jedna.
+    hands = [('R', 'Right hand'), ('L', 'Left hand')] if any(n.hand for n in notes) else [('', title)]
+    mid = MidiFile(type=1 if len(hands) > 1 else 0, ticks_per_beat=ticks_per_beat)
+    for i, (hand, name) in enumerate(hands):
+        track = MidiTrack()
+        mid.tracks.append(track)
+        track.append(mido.MetaMessage('track_name', name=name, time=0))
+        if i == 0:
+            track.append(mido.MetaMessage('set_tempo', tempo=mido.bpm2tempo(tempo), time=0))
+
+        # Vytvorit seznam udalosti (note_on, note_off)
+        events = []
+        for note in notes:
+            if hand and (note.hand or 'R') != hand:
+                continue
+            start_tick = int(note.start_time * ticks_per_beat * tempo / 60)
+            end_tick = max(start_tick + 1, int(note.end_time * ticks_per_beat * tempo / 60))
+            events.append(('note_on', start_tick, note.midi_note, note.velocity))
+            events.append(('note_off', end_tick, note.midi_note, 0))
+
+        # Seradit podle casu, note_off pred note_on pri stejnem casu
+        events.sort(key=lambda e: (e[1], 0 if e[0] == 'note_off' else 1))
+
+        last_tick = 0
+        for event_type, tick, midi_note, velocity in events:
+            track.append(Message(event_type, note=midi_note, velocity=velocity, time=max(0, tick - last_tick)))
+            last_tick = tick
+        track.append(mido.MetaMessage('end_of_track', time=0))
+
     mid.save(output_path)
     print(f"  MIDI ulozeno: {output_path}")
     print(f"  {len(notes)} not, tempo {tempo} BPM")
@@ -107,6 +94,25 @@ def notes_to_text(notes: List[DetectedNote], output_path: str, title: str = "Not
     
     print(f"  Text ulozen: {output_path}")
     return output_path
+
+
+def save_song(notes: List[DetectedNote], library_dir: str, title: str, source: str = '') -> str:
+    """Ulozi pisen do knihovny webove aplikace (JSON). Seznam skladeb sestavuje server.py."""
+    os.makedirs(library_dir, exist_ok=True)
+    ascii_title = unicodedata.normalize('NFKD', title).encode('ascii', 'ignore').decode()
+    slug = re.sub(r'[^a-z0-9]+', '-', ascii_title.lower()).strip('-')[:60] or 'song'
+    path = os.path.join(library_dir, f'{slug}.json')
+    data = {
+        'title': title,
+        'source': source,
+        'notes': [{'p': n.midi_note, 's': round(n.start_time, 3), 'e': round(n.end_time, 3), 'h': n.hand}
+                  for n in sorted(notes, key=lambda n: (n.start_time, n.midi_note))],
+    }
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
+
+    print(f"  Pisen ulozena do knihovny: {path}")
+    return path
 
 
 def get_note_statistics(notes: List[DetectedNote]) -> dict:

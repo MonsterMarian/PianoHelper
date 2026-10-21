@@ -27,3 +27,17 @@ Thumbs.db
 *.tmp
 *.wav
 !test*.wav
+
+# Knihovna prehravace: prevedene skladby jsou jen pro osobni nacvik
+web/songs/*.json
+!web/songs/index.json
+!web/songs/oda-na-radost.json
+
+# Docasne vystupy testu a ladeni
+test_*/
+!tests/
+dbg_*.png
+output_check.jpg
+profile_*.py
+check_keys.py
+node_modules/

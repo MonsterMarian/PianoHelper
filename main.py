@@ -28,9 +28,9 @@ def print_banner():
 
 
 def print_step(step_num: int, title: str):
-    print(f"\n{'─' * 50}")
+    print(f"\n{'=' * 50}")
     print(f"  Krok {step_num}: {title}")
-    print(f"{'─' * 50}")
+    print(f"{'=' * 50}")
 
 
 def main():
@@ -46,8 +46,8 @@ Priklady:
   python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI --preview-only
   python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI --skip-sheet
 
-GUI:
-  streamlit run app.py
+Prehravac (web):
+  python server.py   -> http://localhost:8000
         """
     )
     
@@ -58,17 +58,18 @@ GUI:
     parser.add_argument('--preview-time', type=float, default=10.0, help='Cas nahledoveho snimku v sekundach (default: 10)')
     parser.add_argument('--skip-sheet', action='store_true', help='Preskocit generovani notoveho zapisu')
     parser.add_argument('--skip-midi', action='store_true', help='Preskocit generovani MIDI')
-    parser.add_argument('--frame-skip', type=int, default=2, help='Analyzovat kazdy N-ty snimek (default: 2)')
-    parser.add_argument('--min-pixels', type=int, default=25, help='Minimalni pocet pixelu pro detekci noty (default: 25)')
+    parser.add_argument('--frame-skip', type=int, default=1, help='Analyzovat kazdy N-ty snimek (default: 1 = kazdy, nutne pro opakovane noty)')
     parser.add_argument('--min-duration', type=float, default=0.05, help='Minimalni delka noty v sekundach (default: 0.05)')
+    parser.add_argument('--start-note', type=str, default=None,
+                        help='Nejlevejsi bila klavesa videa (napr. E2). Default: odhad podle stredu klavesnice + zvuku')
+    parser.add_argument('--library', default=os.path.join(os.path.dirname(os.path.abspath(__file__)), 'web', 'songs'),
+                        help='Kam ulozit pisen pro webovou aplikaci (default: web/songs)')
     parser.add_argument('--title', '-t', help='Nazev skladby (default: z nazvu videa)')
     parser.add_argument('--tempo', type=int, default=120, help='Tempo v BPM (default: 120)')
     parser.add_argument('--notes-per-staff', type=int, default=16, help='Pocet not na jeden radk (default: 16)')
     parser.add_argument('--audio', action='store_true', help='Pouzit audio->MIDI misto video detekce')
     parser.add_argument('--method', choices=['auto', 'basic-pitch', 'librosa'], default='auto',
                         help='Metoda audio detekce (s --audio): auto, basic-pitch, librosa')
-    parser.add_argument('--mode', choices=['auto', 'synthesia', 'real_piano', 'tutorial', 'generic'],
-                        default='auto', help='Typ videa: auto, synthesia, real_piano, tutorial, generic')
     parser.add_argument('--isolate-piano', action='store_true',
                         help='Izolovat piano z audio mixu (vyzaduje demucs/spleeter)')
     parser.add_argument('--remove-vocals', action='store_true',
@@ -91,9 +92,9 @@ GUI:
     start_time = time.time()
     
     # Importy
-    from video_downloader import download_video, get_video_info
+    from video_downloader import download_video, download_audio, get_video_info
     from note_detector import detect_notes_from_video, preview_frame, DetectorConfig
-    from midi_generator import notes_to_midi, notes_to_text, get_note_statistics
+    from midi_generator import notes_to_midi, notes_to_text, get_note_statistics, save_song
     from sheet_renderer import SimpleSheetRenderer
     
     # Vystupni slozka
@@ -105,6 +106,7 @@ GUI:
     print_step(1, "Ziskani videa")
     
     video_path = None
+    audio_path = None
     video_title = "Piano Notes"
     
     if args.local:
@@ -114,6 +116,7 @@ GUI:
             print(f"  CHYBA: Soubor neexistuje: {video_path}")
             sys.exit(1)
         video_title = Path(video_path).stem
+        audio_path = video_path   # pokud ma video zvukovou stopu, pouzije se ke kalibraci oktavy
         print(f"  Lokalni video: {video_path}")
     else:
         # Stahnout z YouTube
@@ -127,6 +130,11 @@ GUI:
             print(f"  CHYBA pri stahovani: {e}")
             print(f"\n  Tip: Zkuste stahnout video rucne a pouzit --local <soubor>")
             sys.exit(1)
+        if not args.start_note and not args.audio:
+            try:
+                audio_path = download_audio(args.url, output_dir)
+            except Exception as e:
+                print(f"  Zvuk se nestahl (oktava jen odhadem): {e}")
     
     title = args.title if args.title else video_title
     safe_title = "".join(c for c in title if c.isalnum() or c in ' -_').strip()[:50]
@@ -212,15 +220,14 @@ GUI:
         
         config = DetectorConfig(
             frame_skip=args.frame_skip,
-            min_note_pixels=args.min_pixels,
             min_note_duration=args.min_duration,
-            video_mode=args.mode,
+            start_note_override=args.start_note,
         )
         
         def progress(pct, msg):
             bar_len = 30
             filled = int(bar_len * pct / 100)
-            bar = '█' * filled + '░' * (bar_len - filled)
+            bar = '#' * filled + '.' * (bar_len - filled)
             print(f"\r  [{bar}] {pct:5.1f}% | {msg}", end='', flush=True)
         
         try:
@@ -231,7 +238,15 @@ GUI:
                 import traceback
                 traceback.print_exc()
             sys.exit(1)
-    
+
+        # Oktava z obrazu je jen odhad -> overit podle zvuku (pokud ji uzivatel nezadal)
+        if notes and audio_path and not args.start_note:
+            from audio_octave import octave_shift, apply_shift
+            shift, scores = octave_shift(notes, audio_path)
+            if scores:
+                print(f"\n  Kalibrace oktavy podle zvuku: posun {shift:+d} pultonu")
+            apply_shift(notes, shift)
+
     print()  # Novy radek po progress baru
     
     if not notes:
@@ -295,6 +310,10 @@ GUI:
     else:
         print_step(6, "Notovy zapis - PRESKOCENO")
     
+    # ── KROK 7: Knihovna webove aplikace ──
+    print_step(7, "Ulozeni do knihovny (web)")
+    song_path = save_song(notes, args.library, title, source=args.url or '')
+
     # ── Zaver ──
     elapsed = time.time() - start_time
     
@@ -308,6 +327,7 @@ GUI:
         print(f"    MIDI:      {midi_path}")
     if sheet_path:
         print(f"    Notovy zapis: {sheet_path}")
+    print(f"    Web knihovna: {song_path}")
     print(f"\n  Celkovy cas: {elapsed:.1f}s")
     print(f"\n  Tip: MIDI soubor muzete otevrit v:")
     print(f"    - MuseScore (zdarma: musescore.org)")

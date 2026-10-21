@@ -1,344 +1,102 @@
 # 🎹 PianoHelper
 
-**Převod videí a audia na notový zápis, MIDI soubor a textový seznam not.**
-
-![Python](https://img.shields.io/badge/Python-3.9+-blue)
-![License](https://img.shields.io/badge/License-MIT-green)
-
-## Funkce
-
-- 🎬 **Video detekce not** — OpenCV analýza videí s klavírem (Synthesia styl i reálné piano)
-- 🎵 **Audio→MIDI** — Spotify basic-pitch (polyfonní) nebo librosa pyin (monofonní)
-- 🎼 **Notový zápis** — Automatické generování PNG notových listů
-- 📊 **MIDI export** — Standardní .mid soubory kompatibilní s MuseScore, FL Studio, atd.
-- 🖥️ **Webové rozhraní** — Streamlit GUI s drag-and-drop a přehráváním
-- 🎚️ **Source separation** — Izolace nástrojů z mixu (Demucs/Spleeter)
-- 🎹 **Multi-instrument** — Podpora pro piano, kytaru, vokály a další nástroje
-- 📈 **Adaptivní detekce** — Multi-frame consensus, adaptivní thresholdy, velocity z velikosti not
-
-## Podporované typy videí
-
-- **Synthesia styl** — Padající barevné noty na klávesnici
-- **Reálné piano** — Video skutečného klavíru (detekce stisku kláves ze změny jasu)
-- **Tutorial styl** — Noty/text nahoře, klávesnice dole (PianoGen apod.)
-- **Obecné** — Barevné objekty nad klávesnicí
-- **Audio soubory** — WAV/MP3 bez videa (pouze audio→MIDI)
+**YouTube video s padajícími notami → noty → přehrávač pro nácvik.** Přehrávač má písmena
+na notách, 5 obtížností, opakování úseku a rady k prstokladu.
 
 ## Rychlý start
 
 ```bash
-# 1. Nainstalovat závislosti
 pip install -r requirements.txt
+python server.py                 # → http://localhost:8000
+```
 
-# 2. Zpracovat YouTube video (Synthesia styl)
+V prohlížeči vlož odkaz na YouTube video (Synthesia styl), klikni **Převést** a po chvíli se
+skladba objeví v knihovně. V knihovně je i demo (Óda na radost) a jde otevřít libovolný `.mid`.
+
+Převod jde spustit i z příkazové řádky:
+
+```bash
 python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI
-
-# 3. Reálné piano video (auto-detekce)
-python main.py --local piano_video.mp4 --mode auto
-
-# 4. Audio→MIDI s izolací piana
-python main.py --local song.mp4 --audio --isolate-piano
-
-# 5. Nebo spustit GUI
-streamlit run app.py
+python main.py --local video.mp4 --start-note E2      # nejlevější bílá klávesa, když ji znáš
 ```
 
-## Instalace
+## Přehrávač (`web/`)
 
-### Povinné závislosti
+| funkce | jak |
+|---|---|
+| Padající noty s **písmenem** na notě | „Písmena na notách“; názvy C D E F G A B, česky (H) nebo Do Re Mi |
+| **5 obtížností** | 1 Melodie · 2 Snadné · 3 Střední · 4 Originál · 5 Pokročilé (klávesy 1–5) |
+| **Úsek** na opakování | táhni po časové ose, nebo A / B (klávesy `[` `]`), ⟲ Úsek (L) |
+| **Prstoklad** | „Prstoklad“ (P): číslo prstu na notě i na stisknuté klávese |
+| Nácvik po rukou | vypni zvuk pravé/levé ruky; tu ruku hraješ sám (noty zešednou) |
+| Tempo 25–150 %, rychlost pádu, hlasitost | posuvníky |
+| Akord, tónina, tempo, takt | nahoře v rohu |
 
-```bash
-pip install -r requirements.txt
-```
-
-### Volitelné závislosti
-
-```bash
-# Audio→MIDI (doporučeno)
-pip install basic-pitch
-
-# Audio extrakce z videa
-# Windows: https://ffmpeg.org/download.html
-# macOS: brew install ffmpeg
-# Linux: sudo apt install ffmpeg
-
-# Source separation (izolace nástrojů)
-pip install demucs
-# nebo
-pip install spleeter
-
-# Monofonní pitch detection (fallback)
-pip install librosa
-
-# Webové rozhraní
-pip install streamlit
-
-# Pokročilý notový zápis (potřebuje MuseScore/LilyPond)
-pip install music21
-
-# Bandpass filtr (fallback pro izolaci)
-pip install scipy soundfile
-```
-
-## Použití
-
-### CLI
-
-```bash
-# YouTube video (Synthesia styl)
-python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI
-
-# Lokální video
-python main.py --local video.mp4
-
-# Reálné piano video (detekce stisku kláves)
-python main.py --local real_piano.mp4 --mode real_piano
-
-# Tutorial video (noty nahoře)
-python main.py --local tutorial.mp4 --mode tutorial
-
-# Audio→MIDI místo video detekce
-python main.py --local video.mp4 --audio --method basic-pitch
-
-# Audio→MIDI s izolací piana
-python main.py --local song.mp4 --audio --isolate-piano
-
-# Audio→MIDI s odstraněním vokálů
-python main.py --local song.mp4 --audio --remove-vocals
-
-# Auto-detekce dominantního nástroje
-python main.py --local song.mp4 --audio --detect-instrument
-
-# Separace audia na stopy (vocals/drums/bass/other)
-python main.py --local song.mp4 --audio --separate-stems
-
-# Vlastní nastavení
-python main.py https://www.youtube.com/watch?v=UVnXmLGu4cI \
-    --output ./moje_noty \
-    --title "Moje Skladba" \
-    --tempo 140 \
-    --frame-skip 1 \
-    --min-pixels 15 \
-    --notes-per-staff 20 \
-    --mode synthesia
-```
-
-### Webové rozhraní
-
-```bash
-streamlit run app.py
-```
-
-Otevře se na `http://localhost:8501` s drag-and-drop rozhraním.
-
-**GUI funkce:**
-- YouTube URL nebo upload lokálního videa
-- Výběr video mode (synthesia/real_piano/tutorial/generic/auto)
-- Audio→MIDI pipeline s volitelnou izolací nástrojů
-- Separace audia na stopy s přehráváním
-- Interaktivní náhled klávesnice s detekcí
-- DataFrame s detekovanými notami
-- Download tlačítka pro MIDI/PNG/TXT/stems
-
-### Parametry
-
-| Parametr | Popis | Výchozí |
-|----------|-------|---------|
-| `url` | YouTube URL videa | (povinný) |
-| `--local`, `-l` | Cesta k lokálnímu videu | - |
-| `--output`, `-o` | Výstupní složka | `output` |
-| `--title`, `-t` | Název skladby | z názvu videa |
-| `--tempo` | Tempo v BPM | `120` |
-| `--notes-per-staff` | Počet not na řádek | `16` |
-| `--frame-skip` | Analyzovat každý N-tý snímek | `2` |
-| `--min-pixels` | Minimální počet pixelů pro notu | `25` |
-| `--min-duration` | Minimální délka noty (s) | `0.05` |
-| `--mode` | Typ videa: `auto`, `synthesia`, `real_piano`, `tutorial`, `generic` | `auto` |
-| `--preview-only` | Pouze stáhnout a ukázat náhled | - |
-| `--skip-sheet` | Přeskočit generování notového zápisu | - |
-| `--skip-midi` | Přeskočit generování MIDI | - |
-| `--audio` | Použít audio→MIDI místo video detekce | - |
-| `--method` | Metoda audio detekce (`auto`, `basic-pitch`, `librosa`) | `auto` |
-| `--isolate-piano` | Izolovat piano z audio mixu | - |
-| `--remove-vocals` | Odstranit vokály před detekcí | - |
-| `--instrument` | Cílový nástroj pro audio detekci | - |
-| `--detect-instrument` | Auto-detekovat dominantní nástroj | - |
-| `--separate-stems` | Separovat audio na stopy | - |
-| `--verbose`, `-v` | Detailní logování | - |
-
-## Struktura projektu
-
-```
-Piano/
-├── main.py                    # Hlavní skript s CLI
-├── app.py                     # Streamlit webové rozhraní
-├── video_downloader.py        # Stahování videí z YouTube (yt-dlp)
-├── note_detector.py           # Detekce klávesnice a not (OpenCV)
-│   ├── detect_video_mode()    # Auto-detekce typu videa
-│   ├── detect_real_piano_notes()  # Detekce stisku kláves
-│   └── detect_tutorial_notes()    # Tutorial styl
-├── midi_generator.py          # Převod not na MIDI (mido)
-├── sheet_renderer.py          # Generování notového zápisu (matplotlib)
-├── audio_to_midi.py           # Audio→MIDI (basic-pitch / librosa)
-│   ├── video_to_midi()        # Kompletní pipeline video→audio→MIDI
-│   └── isolate_piano_from_audio()  # Izolace piana
-├── instrument_separator.py    # Source separation (Demucs/Spleeter)
-│   ├── isolate_piano()        # Izolace piana z mixu
-│   ├── remove_instrument()    # Odstranění nástroje
-│   ├── separate_stems()       # Separace na stopy
-│   └── detect_dominant_instrument()  # Detekce nástroje
-├── requirements.txt           # Python závislosti
-└── README.md                  # Tento soubor
-```
+Přehrávač je statický web (HTML + JS moduly bez buildu). Klavír zní ze vzorků
+[Salamander Grand Piano](https://tonejs.github.io/audio/salamander/) (CC-BY), takže je potřeba
+internet. Bez `server.py` funguje také (např. GitHub Pages), jen bez převodu z YouTube.
 
 ## Jak to funguje
 
-### Video detekce (výchozí)
+1. **Detekce z videa** (`note_detector.py`): medián snímků → klávesnice → vzor černých kláves
+   určí názvy → rozsvícené klávesy po snímcích = noty → barva = ruka. Oktáva se ověří podle
+   zvuku (`audio_octave.py`). Podrobně: [teorie/05-detekce-videa.md](teorie/05-detekce-videa.md).
+2. **Hudební analýza** (`web/js/analysis.js`): tempo, takt, akordy, tónina.
+3. **Obtížnosti** (`web/js/arrange.js`): melodie, bas, kvinty, originál, oktávy a rozklady.
+4. **Prstoklad** (`web/js/fingering.js`): dynamické programování nad ergonomickými pravidly
+   (Parncutt 1997, Jacobs 2001).
 
-1. **Stažení videa** z YouTube (nebo lokální soubor)
-2. **Auto-detekce typu videa** — analýza několika snímků pro určení stylu
-3. **Detekce klávesnice** — multi-frame consensus algoritmus najde bílé a černé klávesy
-4. **Detekce not** podle typu videa:
-   - **Synthesia**: HSV filtrace barevných objektů nad klávesnicí v každém snímku
-   - **Real piano**: Sledování změn jasu kláves při stisku
-   - **Tutorial**: Barevné bloky v horní části + klávesnice dole
-   - **Generic**: Obecné barevné objekty nad klávesnicí
-5. **Tracking** — sledování aktivních not napříč snímky, výpočet začátku/konce
-6. **Export** — MIDI, PNG notový zápis, textový seznam
+Teorie, rozhodnutí a plán dalších kroků: **[teorie/](teorie/README.md)**.
 
-### Audio→MIDI (`--audio`)
+## Výstupy `main.py`
 
-1. **Extrakce audia** z videa (ffmpeg)
-2. **Volitelná izolace nástroje** (Demucs/Spleeter/bandpass filtr)
-3. **Pitch detection** — basic-pitch (polyfonní) nebo librosa pyin (monofonní)
-4. **Export** — stejný jako výše
+Do `--output` (default `output/`): `*.mid` (pravá a levá ruka jako dvě stopy), `*_notes.txt`,
+`*_sheet.png` (jednoduchý notový zápis), `preview.jpg` (snímek s vyznačenými klávesami).
+Do knihovny přehrávače (`--library`, default `web/songs/`): `*.json`.
 
-### Source separation
+| parametr | popis | default |
+|---|---|---|
+| `url` / `--local` | YouTube odkaz / lokální video | – |
+| `--start-note` | nejlevější bílá klávesa ve videu (např. `E2`); jinak odhad + zvuk | auto |
+| `--frame-skip` | analyzovat každý N-tý snímek (1 = nutné pro opakované tóny) | 1 |
+| `--min-duration` | kratší noty se zahodí (s) | 0.05 |
+| `--library` | kam uložit skladbu pro přehrávač | `web/songs` |
+| `--audio` | audio→MIDI (basic-pitch/librosa) místo videa – pro videa bez klávesnice | – |
+| `--isolate-piano`, `--remove-vocals`, `--separate-stems`, … | jen s `--audio` | – |
+| `--skip-midi`, `--skip-sheet`, `--preview-only`, `--title`, `--tempo` | | |
 
-- **Demucs** (Meta Research) — 4-stem separation (vocals/drums/bass/other), nejlepší kvalita
-- **Spleeter** (Deezer) — 2/4/5-stem separation, rychlejší
-- **Bandpass filtr** — frekvenční izolace (fallback bez ML modelů)
+Starší Streamlit GUI (`streamlit run app.py`) je pořád k dispozici.
 
-## Příklady použití
-
-### Reálné piano video
-
-```bash
-# Auto-detekce (doporučeno)
-python main.py --local piano_concert.mp4 --mode auto
-
-# Manuální nastavení
-python main.py --local piano_concert.mp4 --mode real_piano --frame-skip 1
-```
-
-### Video s vokály + piano
+## Testy
 
 ```bash
-# Izolovat piano, odstranit vokály
-python main.py --local song_with_vocals.mp4 --audio --isolate-piano
-
-# Odstranit vokály a použít video detekci
-python main.py --local song.mp4 --remove-vocals
+python tests/test_detector.py         # syntetické video se známými notami
+node --test tests/theory.test.mjs     # analýza, prstoklad, ruce, obtížnosti
 ```
 
-### Multi-instrumentální skladba
+## Struktura
 
-```bash
-# Separovat na stopy
-python main.py --local orchestra.mp4 --audio --separate-stems
-
-# Detekovat dominantní nástroj
-python main.py --local orchestra.mp4 --audio --detect-instrument
-
-# Izolovat kytaru
-python main.py --local song.mp4 --audio --instrument guitar
+```
+main.py               CLI pipeline: stažení → detekce → oktáva → MIDI/TXT/PNG → knihovna
+server.py             web + API pro převod z YouTube (jen localhost)
+note_detector.py      detekce klávesnice a not z videa
+audio_octave.py       kalibrace oktávy podle zvuku (PyAV)
+video_downloader.py   yt-dlp (video H.264 ≤480p + zvuková stopa)
+midi_generator.py     MIDI, text, JSON pro přehrávač
+sheet_renderer.py     PNG notový zápis
+audio_to_midi.py, instrument_separator.py, app.py    audio cesta a Streamlit GUI
+web/                  přehrávač (index.html, style.css, js/, songs/)
+teorie/               hudební teorie, algoritmy, plán
+tests/                testy
 ```
 
-### Tutorial video
+## Omezení
 
-```bash
-# PianoGen nebo podobný styl
-python main.py --local tutorial.mp4 --mode tutorial --min-pixels 20
-```
-
-## Tipy pro lepší výsledky
-
-**Nízká přesnost?**
-- Snížit `--min-pixels` na 15-20
-- Snížit `--frame-skip` na 1 (analyzovat každý snímek)
-- Stáhnout video ve vyšší kvalitě
-- Zkusit `--mode real_piano` pro reálná videa
-
-**Příliš mnoho falešných not?**
-- Zvýšit `--min-pixels` na 40-50
-- Zvýšit `--min-duration` na 0.1s
-- Pro reálná videa použít `--frame-skip 3-5`
-
-**Video bez klávesnice?**
-- Program automaticky použije výchozí rozložení
-- Pro lepší výsledky zkontrolujte `--notes-per-staff`
-
-**Audio s více nástroji?**
-- Použijte `--separate-stems` pro rozdělení
-- Nebo `--isolate-piano` pro extrakci piana
-
-## Otevření výstupů
-
-**MIDI** soubory:
-- [MuseScore](https://musescore.org) (zdarma)
-- [Synthesia](https://synthesiagame.com)
-- FL Studio, Ableton Live, GarageBand
-- Online: [midi.show](https://midi.show), [flat.io](https://flat.io)
-
-**Notový zápis** (PNG): jakýkoli prohlížeč obrázků
-
-**Textový seznam**: jakýkoli textový editor
-
-**Separované stopy** (WAV/MP3): jakýkoli audio přehrávač nebo DAW
-
-## Známé limity
-
-- Videa s velmi nízkým rozlišením (< 360p) mohou mít horší přesnost
-- Videa bez klávesnice nebo s neobvyklým layoutem vyžadují manuální úpravy
-- Detekce tempa je přibližná — pro přesné tempo použijte `--tempo`
-- Audio→MIDI vyžaduje video s audiem (ne jen vizuální noty)
-- Source separation (Demucs/Spleeter) vyžaduje ~2GB RAM a GPU pro rychlejší zpracování
-- Real piano detekce funguje nejlépe s jasným osvětlením a stabilní kamerou
-
-## Vývoj
-
-```bash
-# Vývojové prostředí
-python -m venv .venv
-source .venv/bin/activate  # Linux/macOS
-.venv\Scripts\activate     # Windows
-
-pip install -r requirements.txt
-
-# Test detekce
-python note_detector.py output/video.mp4
-
-# Test MIDI generátoru
-python midi_generator.py
-
-# Test audio→MIDI
-python audio_to_midi.py audio.wav --method basic-pitch
-
-# Test instrument separatoru
-python instrument_separator.py audio.wav --mode piano
-
-# Test instrument detection
-python instrument_separator.py audio.wav --mode detect
-```
+- Video musí ukazovat klávesnici, která se při hraní barví (Synthesia a většina tutoriálů).
+  Videa reálného klavíru zvládne jen `--audio`, a to méně přesně.
+- Jedna mřížka tempa na skladbu: přesné pro videa vyrobená z MIDI, ne pro volné tempo.
+- Převedené skladby jsou jen pro osobní nácvik; do repozitáře se necommitují (`.gitignore`).
 
 ## Licence
 
-Volně k použití pro osobní i komerční účely (MIT).
-
-## Poděkování
-
-- [OpenCV](https://opencv.org/) — počítačové vidění
-- [Spotify basic-pitch](https://github.com/spotify/basic-pitch) — polyfonní pitch detection
-- [Demucs](https://github.com/facebookresearch/demucs) — source separation
-- [Mido](https://github.com/olemb/mido) — MIDI knihovna
-- [Streamlit](https://streamlit.io/) — webové rozhraní
+MIT. Vzorky klavíru: Salamander Grand Piano, Alexander Holm (CC-BY 3.0).
