@@ -56,9 +56,12 @@ hraje „ta druhá“ ruka.
 
 ## 4. Jak s tím pracují úrovně
 
-- Úroveň 1 hraje jen pravá ruka.
-- Úroveň 2–3: levá ruka dostane bas pod melodií (strop = nejnižší tón melodie − malá tercie).
-- Úroveň 5: oktávové zdvojení melodie se přidá jen tehdy, když se ruka vejde do oktávy.
+- Začátečník hraje jen pravá ruka.
+- Snadné: levá ruka dostane původní bas pod melodií (strop = nejnižší tón melodie − malá tercie).
+- Střední: levá ruka z originálu, nejvýš 2 tóny naráz (bas + horní tón).
+- Mistr: oktávové zdvojení melodie se přidá jen tehdy, když se ruka vejde do oktávy.
+
+Které kroky skladba má (a na kterém tlačítku je originál), viz [04-aranzovani.md](04-aranzovani.md).
 
 ## 5. Kam položit prsty
 

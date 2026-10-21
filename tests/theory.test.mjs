@@ -225,8 +225,16 @@ test('urovne: snazsi = jen tony originalu, tezsi = cely original + pridane; tezk
     [72 + (i % 5), 67 + (i % 3)].forEach((p) => dense.push({ p, s: t, e: t + 0.11, h: 'R' }));
     [36 + (i % 4) * 2, 48].forEach((p) => dense.push({ p, s: t, e: t + 0.11, h: 'L' }));
   }
+  // stredne tezka: osminy v prave, v leve kvinty a vyplne -> original na 4
+  const medium = [];
+  for (let i = 0; i < 120; i++) {
+    const t = i * 0.25;
+    medium.push({ p: 72 + [0, 2, 4, 7][i % 4], s: t, e: t + 0.22, h: 'R' });
+    if (i % 2) medium.push({ p: 60, s: t, e: t + 0.2, h: 'L' });
+    else [48, 55].forEach((p) => medium.push({ p: p + (i % 8 ? 2 : 0), s: t, e: t + 0.45, h: 'L' }));
+  }
   const key = (n) => `${n.p}@${n.s.toFixed(3)}`;
-  for (const [name, notes, origAt] of [['oda', ode, 3], ['song', song().notes, 3], ['dense', dense, 5]]) {
+  for (const [name, notes, origAt] of [['oda', ode, 3], ['song', song().notes, 3], ['medium', medium, 4], ['dense', dense, 5]]) {
     const levels = levelsFor(splitHands(notes.map((n) => ({ ...n, h: n.h || '' }))));
     assert.equal(levels.findIndex((l) => l.key === 'original') + 1, origAt, name);
     const orig = new Set(notes.map(key));

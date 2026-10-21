@@ -79,7 +79,9 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
 - Potřebuje klávesnici ve videu, která se barví, nebo noty dopadající na linii (i u natočeného
   piana). Videa bez padajících not převádí `--audio` (basic-pitch), což je méně přesné.
 - Záblesky: dvě sousední půltónové noty naráz se poznají jako jedna; bílá klávesa mezi dvěma
-  černými notami těsně po sobě občas vyjde navíc (< 1 % not).
+  černými notami těsně po sobě občas vyjde navíc (< 1 % not). Pravidlo „bílá mezi dvěma
+  hranými černými musí svítit víc než ony“ jsme zkusili a zahodili: záblesk samotné noty A
+  rozsvítí i G♯ a A♯, takže by mazalo skutečná A (83 skutečných not za 1 falešnou).
 - Rychlost = rychlost dekódování videa (~3,5 ms/snímek při 480p).
 - Pokud video celou dobu nemá zvuk, oktáva zůstane odhadem. Dá se zadat ručně
   `--start-note E2` (nejlevější bílá klávesa).

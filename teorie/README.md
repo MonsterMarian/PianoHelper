@@ -8,7 +8,7 @@ různé obtížnosti) a 4 (rady, kterým prstem hrát). Kód je ve `web/js/`, te
 | [01-analyza.md](01-analyza.md) | tempo, doby, takt, akordy, tónina | `analysis.js` |
 | [02-prstoklad.md](02-prstoklad.md) | pravidla prstokladu a jejich výpočet | `fingering.js` |
 | [03-ruce.md](03-ruce.md) | rozdělení not mezi ruce, přehazování rukou | `hands.js` |
-| [04-aranzovani.md](04-aranzovani.md) | jak vznikají úrovně 1–5 | `arrange.js` |
+| [04-aranzovani.md](04-aranzovani.md) | žebřík verzí (zjednodušení ⊂ originál ⊂ rozšíření), kde je originál podle obtížnosti | `arrange.js` |
 | [05-detekce-videa.md](05-detekce-videa.md) | jak se noty čtou z videa | `note_detector.py`, `audio_octave.py` |
 | [06-notovy-zapis.md](06-notovy-zapis.md) | export do notového zápisu (MusicXML) s prstokladem | `musicxml.js` |
 

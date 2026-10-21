@@ -97,10 +97,11 @@ noty, žádné pomlky.
 
 `tests/theory.test.mjs`:
 
-- **slib úrovní** na Ódě, umělé skladbě a husté skladbě (šestnáctiny v obou rukou): pod
+- **slib úrovní** na Ódě, umělé skladbě, středně těžké (osminy, v levé kvinty a výplně)
+  a husté skladbě (šestnáctiny v obou rukou): pod
   originálem je každý tón i v originálu (výška + začátek), nad originálem je celý originál;
   každá snazší úroveň má nejvýš tolik not jako originál a aspoň tolik jako úroveň pod ní;
-  Óda a umělá skladba mají originál na 3, hustá skladba na 5,
+  Óda a umělá skladba mají originál na 3, středně těžká na 4, hustá na 5,
 - Začátečník = přesně hlavní tóny melodie, vždy jedna nota naráz, ≥ 0,9 s od sebe při 120 BPM,
 - Snadné: levá ruka vždy nejvýš 1 nota a celá pod melodií, v C dur hraje C,
 - Snadné při změně tempa (rubato): bas sedí na skutečné době a každý takt má bas,
