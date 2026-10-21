@@ -38,8 +38,16 @@ function spanCost(lo, hi, span, { relaxed = true } = {}) {
 }
 
 // Cena prechodu jedne noty na druhou (a -> b), q = zrcadlena vyska, p = puvodni.
-export function stepCost(fa, qa, pa, fb, qb, pb) {
-  if (fa === fb) return qa === qb ? 0 : 10 + Math.abs(qb - qa);         // stejny prst na jine klavese = skok ruky (bez legata)
+// gap = pauza mezi tony (<= 0.06 s = legato), shape = akord -> akord (posouva se cely tvar ruky).
+export function stepCost(fa, qa, pa, fb, qb, pb, gap = 0, shape = false) {
+  if (fa === fb) {
+    if (qa === qb) return 0;
+    const d = Math.abs(qb - qa);
+    if (gap <= 0.06 && !shape) return 10 + d;                           // stejny prst jinde = konec legata
+    if (shape) return 1 + 0.3 * d;                                      // akordy: zvednout a presunout tvar
+    // oddelene tony: radsi vymenit prst a nechat ruku na miste; po dlouhe pauze presun nevadi
+    return 1 + 0.3 * d + 5 * Math.max(0, 1 - gap / 0.6);
+  }
   const lo = Math.min(fa, fb), hi = Math.max(fa, fb);
   const span = fa < fb ? qb - qa : qa - qb;
   let c = spanCost(lo, hi, span);
@@ -95,8 +103,25 @@ function chordFingerings(k) {
   return out;
 }
 
+// Ucebnicove prstoklady souzvuku (v zrcadlenych souradnicich plati pro obe ruce):
+// tercie+tercie (zakladni tvar) 1-3-5, tercie+kvarta 1-2-5, kvarta+tercie 1-3-5,
+// kvinta az oktava 1-5. Leva ruka tak dostane 5-3-1, 5-3-1 (1. obrat), 5-2-1 (2. obrat).
+function textbook(qs) {
+  const iv = qs.slice(1).map((q, i) => q - qs[i]);
+  if (iv.length === 2) {
+    const third = (x) => x === 3 || x === 4;
+    if (third(iv[0]) && third(iv[1])) return [1, 3, 5];
+    if (third(iv[0]) && iv[1] === 5) return [1, 2, 5];
+    if (iv[0] === 5 && third(iv[1])) return [1, 3, 5];
+  }
+  if (iv.length === 1 && iv[0] >= 7 && iv[0] <= 12) return [1, 5];
+  return null;
+}
+
 function verticalCost(fs, qs, ps) {
   let c = 0;
+  const tb = textbook(qs);
+  if (tb && tb.some((f, i) => f !== fs[i])) c += fs.length === 3 ? 2 : 1;   // jiny nez ucebnicovy tvar
   for (let i = 0; i < fs.length; i++) {
     // malicek na krajni note akordu je prirozeny (C-E-G = 1-3-5), slaby prst se pocita jen u 4
     c += noteCost(fs[i], ps[i]) - (fs.length > 1 && fs[i] === 5 ? 0.5 : 0);
@@ -133,7 +158,8 @@ export function fingerHand(notes, hand) {
         i = 0;
         for (let k = 1; k < A.ns.length; k++) if (Math.abs(A.qs[k] - B.qs[j]) < Math.abs(A.qs[i] - B.qs[j])) i = k;
       }
-      c += stepCost(fa[i], A.qs[i], A.ps[i], fb[j], B.qs[j], B.ps[j]);
+      const gap = B.t - A.ns[i].e;
+      c += stepCost(fa[i], A.qs[i], A.ps[i], fb[j], B.qs[j], B.ps[j], gap, A.ns.length > 1 && B.ns.length > 1);
     }
     c /= B.ns.length;
     const rest = B.t - A.end;

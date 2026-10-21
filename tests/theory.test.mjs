@@ -303,3 +303,18 @@ test('cile prstu: cislo prstu na klavese, kterou zahraje (i u oktav)', async () 
   assert.ok(at0[2].dt > at0[0].dt);                            // vzdalenejsi nota = pozdeji
   assert.deepEqual(fingerTargets(seq, 0).L, []);               // leva nehraje
 });
+
+test('prstoklad akordu podle ucebnic: zakladni tvar a obraty, staccato = presun ruky', () => {
+  // Ma Meilleure Ennemie, leva ruka: Em (E G H) - Hm/D (D F# H) - Am/C (C E A), kratke akordy s pauzou
+  const prog = [[52, 55, 59], [50, 54, 59], [48, 52, 57], [52, 55, 59]];
+  const notes = [];
+  prog.forEach((c, i) => c.forEach((p) => notes.push({ p, s: i * 0.5, e: i * 0.5 + 0.2 })));
+  fingerHand(notes, 'L');
+  const fing = prog.map((c, i) => c.map((p) => notes.find((n) => n.p === p && n.s === i * 0.5).f).join(''));
+  assert.deepEqual(fing, ['531', '531', '531', '531']);
+  // obraty v prave ruce: C dur 1. obrat (E G C) = 1-2-5, 2. obrat (G C E) = 1-3-5
+  assert.equal(chord([64, 67, 72], 'R'), '125');
+  assert.equal(chord([67, 72, 76], 'R'), '135');
+  // leva ruka: 2. obrat (G C E) = 5-2-1
+  assert.equal(chord([55, 60, 64], 'L'), '521');
+});

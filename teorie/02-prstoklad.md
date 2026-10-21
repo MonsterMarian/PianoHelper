@@ -57,7 +57,10 @@ palec pod/přes prst.
 | 10 | palec na černé (+2 když soused je bílý) | 1 + 2 + 2 |
 | 11 | malíček na černé vedle bílé | 2 |
 | 12 | podklad palce: stejná úroveň / palec na černé | 0,5 + 1 / 0,5 + 3 |
-| – | stejný prst na jiné klávese | 10 + vzdálenost |
+| – | stejný prst na jiné klávese: legato | 10 + vzdálenost |
+| – | … oddělené tóny (pauza *g*) | 1 + 0,3·vzdálenost + 5·max(0; 1 − g/0,6 s) |
+| – | … akord → akord (posun celého tvaru) | 1 + 0,3·vzdálenost |
+| – | souzvuk jinak než podle učebnice | 2 (trojzvuk) / 1 (dvojzvuk) |
 | – | mimo MaxPrac / MinPrac (nehratelné) | 50 |
 
 ### Kde se model liší od Parncutta (a proč)
@@ -74,6 +77,22 @@ upravené. Každá změna má test v `tests/theory.test.mjs`:
 - **Stejný prst na jiné klávese = 10 + vzdálenost.** Parncutt tento případ vůbec nezná
   (předpokládá legato). Bez penalizace by model jezdil palcem po sousedních klávesách.
 - **Malíček na krajní notě akordu se nepočítá jako slabý prst**, aby vyhrálo 1-3-5 nad 1-2-4.
+- **Stejný prst na jiné klávese je drahý jen při legatu.** Krátké akordy s pauzou (staccato
+  doprovod) se hrají tak, že ruka drží tvar a přesune se celá. U Ma Meilleure Ennemie původní
+  cena (10 bodů vždy) vedla k 4-2-1 na E-G-H, aby se ruka nemusela hnout. Klavírista ale hraje
+  5-3-1 a ruku posune. U jednotlivých tónů s krátkou pauzou se pořád vyplatí spíš vyměnit prst
+  a nechat ruku na místě (pro začátečníka jednodušší). Po pauze delší než 0,6 s je přesun volný.
+- **Učebnicové prstoklady souzvuků** (Alfred, Bastien, Faber):
+
+  | souzvuk | pravá | levá |
+  |---|---|---|
+  | kvintakord (tercie + tercie) | 1-3-5 | 5-3-1 |
+  | sextakord, 1. obrat (tercie + kvarta) | 1-2-5 | 5-3-1 |
+  | kvartsextakord, 2. obrat (kvarta + tercie) | 1-3-5 | 5-2-1 |
+  | kvinta až oktáva | 1-5 | 5-1 |
+
+  V zrcadlených souřadnicích levé ruky je to jedna tabulka. Jiný prstoklad stojí 2 body (trojzvuk)
+  nebo 1 bod (dvojzvuk), takže se použije jen tehdy, když ho vynutí okolí.
 - **Pauza dává ruce čas.** Když mezi notami je pauza, cena přechodu se násobí
   `max(0,15; 1 − pauza / 0,8 s)`. Po pauze se ruka smí volně přesunout.
 
@@ -101,6 +120,8 @@ upravené. Každá změna má test v `tests/theory.test.mjs`:
 | C dur 2 oktávy | 1 2 3 1 2 3 4 1 2 3 1 2 3 4 5 | ✔ |
 | C E G | PR 1 3 5 / LR 5 3 1 | ✔ |
 | Óda na radost | 3 3 4 5 5 4 3 2 1 1 2 3 3 2 2 | ✔ |
+| Ma Meilleure Ennemie, LR: Em – Hm/D – Am/C (staccato) | 5-3-1, 5-3-1, 5-3-1 (posun ruky) | ✔ |
+| obraty v PR: E-G-C / G-C-E, v LR: G-C-E | 1-2-5 / 1-3-5, 5-2-1 | ✔ |
 
 ## Omezení a plán
 
