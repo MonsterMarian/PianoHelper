@@ -24,14 +24,15 @@ python main.py --local video.mp4 --start-note E2      # nejlevější bílá kl�
 
 | funkce | jak |
 |---|---|
-| Padající noty s **písmenem** na notě | „Písmena na notách“; názvy C D E F G A B, česky (H) nebo Do Re Mi |
+| Padající noty s **písmenem** na notě | „Písmena“; názvy C D E F G A B, česky (H) nebo Do Re Mi (nastavení) |
 | **5 obtížností** | 1 Melodie · 2 Snadné · 3 Střední · 4 Originál · 5 Pokročilé (klávesy 1–5) |
-| **Úsek** na opakování | táhni po časové ose, nebo A / B (klávesy `[` `]`), ⟲ Úsek (L) |
-| **Prstoklad** | „Prstoklad“ (P): číslo prstu na notě i na stisknuté klávese |
-| Nácvik po rukou | vypni zvuk pravé/levé ruky; tu ruku hraješ sám (noty zešednou) |
+| **Úsek** na opakování | táhni po časové ose, nebo A / B (klávesy `[` `]`), Opakovat (L) |
+| **Prstoklad** | „Prsty“ (P): číslo prstu na notě i na stisknuté klávese |
+| **Čekej na mě** | přehrávač počká, až zahraješ správné tóny — MIDI klavír nebo klávesnice počítače (A W S E D F T G Y H U J K = C…C, Z/X oktáva) |
+| Nácvik po rukou | „Hraju já: Pravá / Levá“ — tu ruku hraješ sám, druhá zní a je ztlumená |
+| Orientace | tečka na C4, popisky C3/C4/C5, velký název akordu na scéně |
+| **Notový zápis** s prstokladem | Nastavení → „Stáhnout notový zápis (MusicXML)“ → MuseScore |
 | Tempo 25–150 %, rychlost pádu, hlasitost | posuvníky |
-| Akord, tónina, tempo, takt | nahoře v rohu |
-| **Notový zápis** s prstokladem | „Stáhnout noty (MusicXML)“ → otevři v MuseScore a vytiskni |
 
 Přehrávač je statický web (HTML + JS moduly bez buildu). Klavír zní ze vzorků
 [Salamander Grand Piano](https://tonejs.github.io/audio/salamander/) (CC-BY), takže je potřeba

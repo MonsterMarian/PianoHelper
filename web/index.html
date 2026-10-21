@@ -4,95 +4,163 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>PianoHelper</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%23161a22'/><rect x='2' y='3' width='3' height='10' fill='%23fff'/><rect x='6.5' y='3' width='3' height='10' fill='%23fff'/><rect x='11' y='3' width='3' height='10' fill='%23fff'/><rect x='4.2' y='3' width='1.8' height='6' fill='%23161a22'/><rect x='8.7' y='3' width='1.8' height='6' fill='%23161a22'/></svg>">
+  <meta name="description" content="Padající noty s písmeny, pět obtížností, prstoklad a režim, který počká, až zahraješ.">
+  <meta name="theme-color" content="#0c0b09">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%230c0b09'/><rect x='6' y='7' width='5' height='18' rx='1' fill='%23efe9dc'/><rect x='13.5' y='7' width='5' height='18' rx='1' fill='%23efe9dc'/><rect x='21' y='7' width='5' height='18' rx='1' fill='%23efe9dc'/><rect x='9.5' y='7' width='3' height='10' fill='%230c0b09'/><rect x='17' y='7' width='3' height='10' fill='%230c0b09'/><circle cx='16' cy='21' r='1.6' fill='%23ff4f1f'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <!-- import .mid souboru -->
   <script src="https://cdn.jsdelivr.net/npm/@tonejs/midi@2.0.28/build/Midi.js" defer></script>
 </head>
 <body>
-  <header class="topbar">
-    <h1 class="brand">PianoHelper</h1>
-    <div class="song-pick">
-      <label class="sr-only" for="song">Skladba</label>
-      <select id="song"><option value="">Načítám knihovnu…</option></select>
-      <label class="btn ghost file-btn" title="Otevřít .mid nebo .json">
-        Otevřít soubor
+  <div class="app">
+    <header class="top">
+      <a class="mark" href="./" aria-label="PianoHelper">Piano<em>Helper</em></a>
+      <button id="library-open" class="title-btn" aria-haspopup="dialog" title="Knihovna (K)">
+        <span class="eyebrow">Skladba <span aria-hidden="true">↓</span></span>
+        <span id="title" class="title">Vyber skladbu</span>
+      </button>
+      <dl class="meta">
+        <div><dt>Tónina</dt><dd id="m-key">—</dd></div>
+        <div><dt>Tempo</dt><dd id="m-bpm">—</dd></div>
+        <div><dt>Takt</dt><dd id="m-meter">—</dd></div>
+      </dl>
+      <button id="settings-open" class="icon-btn" aria-haspopup="dialog" aria-label="Nastavení">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="16" cy="7" r="2" stroke="currentColor" stroke-width="1.6" fill="none"/><circle cx="8" cy="17" r="2" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
+      </button>
+    </header>
+
+    <main class="stage">
+      <canvas id="stage" aria-label="Padající noty a klaviatura"></canvas>
+      <div id="chord" class="chord" aria-hidden="true"></div>
+      <div id="wait-hud" class="wait-hud" hidden>
+        <span class="eyebrow">Zahraj</span>
+        <span id="wait-notes" class="wait-notes"></span>
+      </div>
+      <div id="message" class="empty" hidden>
+        <p class="eyebrow">PianoHelper</p>
+        <h2>Zahraj, co&nbsp;slyšíš.</h2>
+        <p id="message-text">Vyber skladbu z knihovny, otevři MIDI, nebo převeď video z YouTube.</p>
+        <button class="key-btn accent" data-open-library type="button">Otevřít knihovnu</button>
+      </div>
+    </main>
+
+    <footer class="deck">
+      <div class="scrub">
+        <div class="loop-ctrl" role="group" aria-label="Opakování úseku">
+          <button id="set-a" class="key-btn square" title="Začátek úseku ( [ )">A</button>
+          <button id="set-b" class="key-btn square" title="Konec úseku ( ] )">B</button>
+          <button id="loop" class="key-btn" aria-pressed="false" title="Opakovat úsek (L)">Opakovat</button>
+          <span id="loop-info" class="hint">táhni po ose</span>
+        </div>
+        <canvas id="timeline" class="timeline" aria-label="Časová osa: klik = skok, tažení = výběr úseku"></canvas>
+      </div>
+      <div class="deck-row">
+        <div class="cell transport">
+          <button id="play" class="play" aria-label="Přehrát (mezerník)">
+            <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>
+            <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg>
+          </button>
+          <button id="restart" class="key-btn square" aria-label="Na začátek">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 5h2v14H6zM19 5.5v13L9.5 12z" fill="currentColor"/></svg>
+          </button>
+          <output id="time" class="readout">0:00<span>/ 0:00</span></output>
+        </div>
+
+        <div class="cell grow">
+          <span class="label">Obtížnost</span>
+          <div id="levels" class="levels" role="group" aria-label="Obtížnost"></div>
+        </div>
+
+        <div class="cell">
+          <span class="label">Na notách</span>
+          <div class="row">
+            <label class="chip"><input id="letters" type="checkbox" checked><span>Písmena</span></label>
+            <label class="chip"><input id="fingers" type="checkbox"><span>Prsty</span></label>
+          </div>
+        </div>
+
+        <div class="cell">
+          <span class="label">Hraju já</span>
+          <div class="row">
+            <label class="chip rh"><input id="mine-r" type="checkbox"><span>Pravá</span></label>
+            <label class="chip lh"><input id="mine-l" type="checkbox"><span>Levá</span></label>
+            <label class="chip accent"><input id="wait" type="checkbox"><span>Čekej na mě</span></label>
+          </div>
+        </div>
+
+        <div class="cell tempo">
+          <span class="label">Tempo <output id="speed-out">100 %</output></span>
+          <input id="speed" type="range" min="0.25" max="1.5" step="0.05" value="1" aria-label="Tempo">
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <dialog id="library" class="sheet" aria-labelledby="library-h">
+    <div class="sheet-head">
+      <h2 id="library-h">Knihovna</h2>
+      <button class="icon-btn" data-close aria-label="Zavřít">✕</button>
+    </div>
+    <ol id="song-list" class="song-list"></ol>
+    <div class="sheet-foot">
+      <form id="convert" class="convert" hidden>
+        <span class="label">Převést video z YouTube</span>
+        <div class="row">
+          <input id="yt" type="url" placeholder="https://www.youtube.com/watch?v=…" required aria-label="Odkaz na YouTube video">
+          <input id="start-note" type="text" placeholder="1. klávesa" size="8" pattern="[A-Ga-g][#b]?[0-8]" aria-label="První bílá klávesa (volitelné)" title="Např. E2 - nejlevější bílá klávesa ve videu. Prázdné = automaticky">
+          <button class="key-btn accent" type="submit">Převést</button>
+        </div>
+        <p id="job" class="hint" aria-live="polite"></p>
+      </form>
+      <label class="key-btn file-btn">
+        Otevřít .mid / .json
         <input id="file" type="file" accept=".mid,.midi,.json" hidden>
       </label>
     </div>
-    <form id="convert" class="convert" hidden>
-      <label class="sr-only" for="yt">Odkaz na YouTube video</label>
-      <input id="yt" type="url" placeholder="Odkaz na YouTube video s padajícími notami" required>
-      <label class="sr-only" for="start-note">První bílá klávesa (volitelné)</label>
-      <input id="start-note" type="text" placeholder="1. klávesa" size="9" pattern="[A-Ga-g][#b]?[0-8]" title="Např. E2 - nejlevější bílá klávesa ve videu. Prázdné = automaticky">
-      <button class="btn" type="submit">Převést</button>
-    </form>
-  </header>
+  </dialog>
 
-  <main class="layout">
-    <section class="stage-wrap">
-      <div class="stage">
-        <canvas id="stage" aria-label="Padající noty a klaviatura"></canvas>
-        <div class="hud">
-          <span id="chord" class="chip" title="Akord v aktuálním místě"></span>
-          <span id="song-info" class="chip"></span>
-        </div>
-        <div id="message" class="message" hidden></div>
-      </div>
-      <canvas id="timeline" class="timeline" aria-label="Časová osa: kliknutí = skok, tažení = výběr úseku"></canvas>
-      <div class="transport">
-        <button id="play" class="btn primary" aria-label="Přehrát (mezerník)">▶</button>
-        <button id="restart" class="btn ghost" aria-label="Na začátek">⏮</button>
-        <span id="time" class="time">0:00 / 0:00</span>
-        <div class="loop-ctrl" role="group" aria-label="Opakování úseku">
-          <button id="set-a" class="btn ghost" title="Začátek úseku = aktuální místo ([)">A</button>
-          <button id="set-b" class="btn ghost" title="Konec úseku = aktuální místo (])">B</button>
-          <button id="loop" class="btn ghost" aria-pressed="false" title="Opakovat úsek (L)">⟲ Úsek</button>
-          <span id="loop-info" class="muted"></span>
-        </div>
-        <label class="speed">Tempo
-          <input id="speed" type="range" min="0.25" max="1.5" step="0.05" value="1">
-          <output id="speed-out">100 %</output>
-        </label>
-      </div>
-    </section>
+  <dialog id="settings" class="sheet side" aria-labelledby="settings-h">
+    <div class="sheet-head">
+      <h2 id="settings-h">Nastavení</h2>
+      <button class="icon-btn" data-close aria-label="Zavřít">✕</button>
+    </div>
+    <div class="settings">
+      <label class="field"><span class="label">Názvy not</span>
+        <select id="naming">
+          <option value="intl">C D E F G A B</option>
+          <option value="cz">C D E F G A H — česky</option>
+          <option value="solfege">Do Re Mi</option>
+        </select>
+      </label>
+      <label class="field"><span class="label">Rychlost pádu</span><input id="zoom" type="range" min="1.5" max="8" step="0.5" value="3.5"></label>
+      <label class="field"><span class="label">Hlasitost</span><input id="volume" type="range" min="0" max="1" step="0.05" value="0.8"></label>
+      <label class="chip wide"><input id="echo" type="checkbox" checked><span>Ozvučit moje hraní</span></label>
 
-    <aside class="panel">
-      <fieldset>
-        <legend>Obtížnost</legend>
-        <div id="levels" class="levels"></div>
-        <p id="level-hint" class="muted small"></p>
-        <button id="export" class="btn ghost export" type="button" title="Notový zápis této obtížnosti i s prstokladem (otevře MuseScore)">Stáhnout noty (MusicXML)</button>
-      </fieldset>
-      <fieldset>
-        <legend>Zobrazení</legend>
-        <label class="row"><input id="letters" type="checkbox" checked> Písmena na notách</label>
-        <label class="row indent">Názvy
-          <select id="naming">
-            <option value="intl">C D E F G A B</option>
-            <option value="cz">C D E F G A H (česky)</option>
-            <option value="solfege">Do Re Mi</option>
-          </select>
-        </label>
-        <label class="row"><input id="fingers" type="checkbox"> Prstoklad (1 = palec … 5 = malíček)</label>
-        <label class="row">Rychlost pádu
-          <input id="zoom" type="range" min="1.5" max="8" step="0.5" value="3.5">
-        </label>
-      </fieldset>
-      <fieldset>
-        <legend>Ruce</legend>
-        <label class="row"><input id="play-r" type="checkbox" checked> <span class="swatch rh"></span> Pravá ruka zní</label>
-        <label class="row"><input id="play-l" type="checkbox" checked> <span class="swatch lh"></span> Levá ruka zní</label>
-        <p class="muted small">Vypnutou ruku hraješ sám — noty zešednou. Čárkovaný okraj = nota přehozená do druhé ruky, aby se hrála snáz.</p>
-        <label class="row">Hlasitost <input id="volume" type="range" min="0" max="1" step="0.05" value="0.8"></label>
-      </fieldset>
-      <details class="help">
-        <summary>Klávesové zkratky</summary>
-        <p class="small">Mezerník přehrát/pauza · ←/→ ±5 s · [ a ] začátek/konec úseku · L opakovat úsek · 1–5 obtížnost · P prstoklad · N písmena</p>
-      </details>
-      <p id="job" class="muted small" aria-live="polite"></p>
-    </aside>
-  </main>
+      <section class="field">
+        <span class="label">Hraní</span>
+        <p class="hint">MIDI klavír stačí připojit (Chrome, Edge). <span id="midi-status"></span></p>
+        <p class="hint">S „Čekej na mě“ funguje i klávesnice počítače:</p>
+        <div class="keymap" aria-hidden="true">
+          <div><kbd>W</kbd><kbd>E</kbd><i></i><kbd>T</kbd><kbd>Y</kbd><kbd>U</kbd><i></i><kbd>O</kbd><kbd>P</kbd></div>
+          <div><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd><kbd>F</kbd><kbd>G</kbd><kbd>H</kbd><kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></div>
+        </div>
+        <p class="hint">A = C<span id="oct">4</span> · Z / X = oktáva níž / výš · na QWERTZ platí poloha kláves</p>
+      </section>
+
+      <section class="field">
+        <span class="label">Noty</span>
+        <button id="export" class="key-btn wide" type="button">Stáhnout notový zápis (MusicXML)</button>
+        <p class="hint">Aktuální obtížnost i s prstokladem — otevře MuseScore.</p>
+      </section>
+
+      <section class="field">
+        <span class="label">Zkratky</span>
+        <p class="hint">Mezerník hrát · ← → ±5 s · [ ] úsek · L opakovat · 1–5 obtížnost · P prsty · N písmena · M čekej na mě · K knihovna (v režimu čekání patří písmena klavíru)</p>
+      </section>
+    </div>
+  </dialog>
 
   <script type="module" src="js/app.js"></script>
 </body>

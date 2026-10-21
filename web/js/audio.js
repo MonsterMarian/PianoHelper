@@ -1,4 +1,6 @@
 // Prehravani: vzorky klaviru Salamander (CC-BY 3.0, Alexander Holm) + planovac s predstihem.
+// Rezim "cekej na me": cas se zastavi u akordu, dokud hrac nezahraje jeho tony.
+import { onsetGroups } from './music.js';
 const SAMPLE_URL = 'https://tonejs.github.io/audio/salamander/';
 const SAMPLE_PITCHES = [];
 for (let p = 21; p <= 108; p += 3) SAMPLE_PITCHES.push(p);       // A0, C1, D#1, F#1, ... C8
@@ -11,7 +13,14 @@ export class Player {
     this.playing = false;
     this.speed = 1;
     this.loop = null;           // { a, b } nebo null
-    this.mute = { L: false, R: false };
+    this.mute = { L: false, R: false };   // ruka, kterou hraje uzivatel (nezni z reproduktoru)
+    this.waitOn = false;
+    this.groups = [];           // akordy, na ktere se ceka: [{ t, pitches: Set }]
+    this.gi = 0;
+    this.waiting = null;        // akord, na ktery se prave ceka
+    this.recent = new Set();    // tony stisknute od posledniho splneneho akordu
+    this.held = new Set();
+    this.live = new Map();
     this.volume = 0.8;
     this.voices = new Set();
     this.samples = new Map();
@@ -39,7 +48,40 @@ export class Player {
   setNotes(notes) {
     if (this.playing) this.position = this.now();
     this.notes = [...notes].sort((a, b) => a.s - b.s);
+    this.buildGroups();
     if (this.playing) this.restart();
+  }
+
+  // Na co se ceka: noty rukou, ktere hraje uzivatel (kdyz zadnou, tak obe).
+  buildGroups() {
+    const mine = this.mute.L || this.mute.R ? this.notes.filter((n) => this.mute[n.h === 'L' ? 'L' : 'R']) : this.notes;
+    this.groups = onsetGroups(mine).map((g) => ({ t: g.t, pitches: new Set(g.notes.map((n) => n.p)) }));
+    this.gi = this.groups.findIndex((g) => g.t >= this.position - 0.01);
+    if (this.gi < 0) this.gi = this.groups.length;
+  }
+
+  setWait(on) {
+    this.waitOn = on;
+    this.waiting = null;
+    this.recent.clear();
+    this.buildGroups();
+  }
+
+  setMute(hand, on) {
+    this.mute[hand] = on;
+    this.buildGroups();
+  }
+
+  // Vstup z MIDI klavesnice nebo klavesnice pocitace.
+  input(p, on, sound = true) {
+    if (on) {
+      this.held.add(p);
+      this.recent.add(p);
+      if (sound) this.liveOn(p);
+    } else {
+      this.held.delete(p);
+      this.liveOff(p);
+    }
   }
 
   now() {
@@ -80,6 +122,9 @@ export class Player {
     this.anchorSong = this.position;
     this.next = this.notes.findIndex((n) => n.s >= this.position - 1e-6);
     if (this.next < 0) this.next = this.notes.length;
+    this.gi = this.groups.findIndex((g) => g.t >= this.position - 0.01);
+    if (this.gi < 0) this.gi = this.groups.length;
+    this.waiting = null;
   }
 
   tick() {
@@ -89,7 +134,27 @@ export class Player {
       if (this.loop) { this.position = this.loop.a; this.restart(); t = this.position; }
       else { this.pause(); this.position = 0; this.onEnd?.(); return; }
     }
-    const horizon = t + 0.15 * this.speed;
+    let horizon = t + 0.15 * this.speed;
+    if (this.waitOn) {
+      const g = this.groups[this.gi];
+      // cas se zastavi 4 ms pred akordem: noty jsou na linii, ale jeste "nezni" (klavesy nesviti)
+      if (g && t >= g.t - 0.005) {
+        if ([...g.pitches].every((p) => this.recent.has(p))) {
+          this.gi++;
+          this.recent.clear();
+          if (this.waiting) { this.anchorSong = g.t; this.anchorCtx = this.ctx.currentTime; t = g.t; }
+          this.waiting = null;
+        } else {
+          // zastavit cas na akordu (anchor se posouva s hodinami -> now() stoji)
+          this.waiting = g;
+          this.anchorSong = g.t - 0.004;
+          this.anchorCtx = this.ctx.currentTime;
+          t = g.t - 0.004;
+        }
+      }
+      const next = this.groups[this.gi];
+      if (next) horizon = Math.min(horizon, next.t - 0.001);   // noty akordu zazni az po splneni
+    }
     while (this.next < this.notes.length && this.notes[this.next].s < horizon) {
       const n = this.notes[this.next++];
       if (this.mute[n.h === 'L' ? 'L' : 'R'] || (this.loop && n.s >= this.loop.b)) continue;
@@ -128,6 +193,25 @@ export class Player {
     const voice = { src, gain };
     this.voices.add(voice);
     src.onended = () => { gain.disconnect(); this.voices.delete(voice); };
+    return voice;
+  }
+
+  liveOn(p) {
+    this.ensureContext();
+    this.ctx.resume();
+    this.liveOff(p);
+    const v = this.noteOn(p, this.ctx.currentTime, 30, 0.75);
+    this.live.set(p, v);
+  }
+
+  liveOff(p) {
+    const v = this.live.get(p);
+    if (!v) return;
+    this.live.delete(p);
+    const now = this.ctx.currentTime;
+    v.gain.gain.cancelScheduledValues(now);
+    v.gain.gain.setTargetAtTime(0, now, 0.08);
+    try { v.src.stop(now + 0.6); } catch { /* uz skoncil */ }
   }
 
   stopAll() {

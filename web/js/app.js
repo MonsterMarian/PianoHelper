@@ -2,8 +2,9 @@ import { arrange, LEVELS } from './arrange.js';
 import { estimateGrid, chordTrack, detectKey } from './analysis.js';
 import { Player } from './audio.js';
 import { draw, drawTimeline, layoutKeys } from './render.js';
-import { songEnd } from './music.js';
+import { songEnd, noteName } from './music.js';
 import { toMusicXML } from './musicxml.js';
+import { keyboardInput, midiInput } from './input.js';
 
 const $ = (id) => document.getElementById(id);
 const player = new Player();
@@ -14,31 +15,56 @@ const prefs = (() => { try { return JSON.parse(localStorage.getItem('pianohelper
 const savePrefs = () => { try { localStorage.setItem('pianohelper', JSON.stringify(prefs)); } catch { /* soukrome okno */ } };
 
 const state = {
-  title: '', base: [], grid: null, chords: [], level: prefs.level ?? 4,
+  title: '', file: '', base: [], grid: null, chords: [], key: null, level: prefs.level ?? 4,
   notes: [], cache: new Map(), duration: 0, lo: 48, hi: 84, loop: null, loopOn: false,
+  library: [], pressed: new Map(), octave: prefs.octave ?? 4,
 };
 
-const fmt = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
-function message(text) { $('message').hidden = !text; $('message').textContent = text || ''; }
+const fmt = (t) => `${Math.floor(Math.max(0, t) / 60)}:${String(Math.floor(Math.max(0, t) % 60)).padStart(2, '0')}`;
+function message(text) {
+  $('message').hidden = !text;
+  if (text) $('message-text').textContent = text;
+}
 
 // ── Knihovna ────────────────────────────────────────────────────────────────
 async function loadIndex(select) {
-  let list = [];
-  try { list = await (await fetch('songs/index.json', { cache: 'no-store' })).json(); } catch { /* prazdna knihovna */ }
-  const sel = $('song');
-  sel.innerHTML = '';
-  sel.append(new Option(list.length ? '— vyber skladbu —' : 'Knihovna je prázdná', ''));
-  for (const s of list) sel.append(new Option(`${s.title} (${fmt(s.duration)})`, s.file));
-  const pick = select || prefs.song;
-  if (pick && list.some((s) => s.file === pick)) { sel.value = pick; await loadSongFile(pick); }
-  else if (!state.base.length) message('Vyber skladbu z knihovny, otevři .mid soubor, nebo převeď video z YouTube.');
+  try { state.library = await (await fetch('songs/index.json', { cache: 'no-store' })).json(); } catch { state.library = []; }
+  renderLibrary();
+  // prvni navsteva: demo, at je hned co hrat
+  const pick = select || prefs.song || state.library.find((s) => s.file === 'oda-na-radost.json')?.file || state.library[0]?.file;
+  if (pick && state.library.some((s) => s.file === pick)) await loadSongFile(pick);
+  else if (!state.base.length) message('Knihovna je prázdná. Otevři MIDI soubor, nebo převeď video z YouTube.');
+}
+
+function renderLibrary() {
+  const list = $('song-list');
+  list.innerHTML = '';
+  if (!state.library.length) {
+    list.innerHTML = '<li class="empty-row">Zatím tu nic není.</li>';
+    return;
+  }
+  for (const s of state.library) {
+    const li = document.createElement('li');
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-current', String(s.file === state.file));
+    b.innerHTML = '<span class="t"></span><span class="n"></span><span class="d"></span>';
+    b.querySelector('.t').textContent = s.title;
+    b.querySelector('.n').textContent = `${s.notes} not`;
+    b.querySelector('.d').textContent = fmt(s.duration);
+    b.addEventListener('click', () => { $('library').close(); loadSongFile(s.file); });
+    li.append(b);
+    list.append(li);
+  }
 }
 
 async function loadSongFile(file) {
   try {
     const song = await (await fetch(`songs/${encodeURIComponent(file)}`)).json();
     prefs.song = file; savePrefs();
+    state.file = file;
     setSong(song.title, song.notes);
+    renderLibrary();
   } catch (e) { message(`Skladbu se nepodařilo načíst: ${e.message}`); }
 }
 
@@ -51,12 +77,17 @@ function setSong(title, notes) {
   state.chords = chordTrack(state.base, state.grid, songEnd(state.base));
   state.cache.clear();
   state.loop = null; state.loopOn = false;
-  const key = state.key = detectKey(state.base);
-  $('song-info').textContent = `${key.name} · ${Math.round(60 / state.grid.beat)} BPM · ${state.grid.meter}/4`;
+  state.key = detectKey(state.base);
+  $('title').textContent = title;
+  $('m-key').textContent = state.key.name;
+  $('m-bpm').textContent = `${Math.round(60 / state.grid.beat)}`;
+  $('m-meter').textContent = `${state.grid.meter}/4`;
+  document.title = `${title} — PianoHelper`;
   message('');
   applyLevel();
   player.seek(Math.max(0, state.base[0].s - 1));
   updateLoopUi();
+  syncPlay();
 }
 
 function applyLevel() {
@@ -65,12 +96,10 @@ function applyLevel() {
   state.notes = state.cache.get(state.level);
   player.setNotes(state.notes);
   const ps = state.notes.map((n) => n.p);
-  state.lo = Math.min(...ps) - 2; state.hi = Math.max(...ps) + 2;
-  // aspon 2 oktavy, at nejsou klavesy obri
-  while (state.hi - state.lo < 24) { state.lo--; state.hi++; }
+  state.lo = Math.min(...ps, 60) - 2; state.hi = Math.max(...ps, 60) + 2;   // C4 je vzdy videt (orientace)
+  while (state.hi - state.lo < 24) { state.lo--; state.hi++; }               // aspon 2 oktavy
   state.duration = songEnd(state.notes);
   for (const b of $('levels').children) b.setAttribute('aria-pressed', String(Number(b.dataset.level) === state.level));
-  $('level-hint').textContent = LEVELS.find((l) => l.id === state.level).hint;
 }
 
 // ── Import .mid / .json ─────────────────────────────────────────────────────
@@ -88,18 +117,19 @@ function midiToNotes(buf) {
 $('file').addEventListener('change', async (ev) => {
   const f = ev.target.files[0];
   if (!f) return;
+  $('library').close();
   try {
+    state.file = '';
     if (/\.json$/i.test(f.name)) {
       const song = JSON.parse(await f.text());
       setSong(song.title || f.name, song.notes);
     } else {
       setSong(f.name.replace(/\.midi?$/i, ''), midiToNotes(await f.arrayBuffer()));
     }
-    $('song').value = '';
+    renderLibrary();
   } catch (e) { message(`Soubor nejde otevřít: ${e.message}`); }
   ev.target.value = '';
 });
-$('song').addEventListener('change', (e) => e.target.value && loadSongFile(e.target.value));
 
 // ── Prevod z YouTube (jen kdyz bezi server.py) ──────────────────────────────
 async function initConvert() {
@@ -122,16 +152,28 @@ async function pollJob(id) {
   else if (job.status === 'done') loadIndex(job.song);
 }
 
+// ── Dialogy ─────────────────────────────────────────────────────────────────
+const openLibrary = () => $('library').showModal();
+$('library-open').addEventListener('click', openLibrary);
+document.querySelectorAll('[data-open-library]').forEach((b) => b.addEventListener('click', openLibrary));
+$('settings-open').addEventListener('click', () => $('settings').showModal());
+document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
+for (const d of document.querySelectorAll('dialog')) {
+  d.addEventListener('click', (e) => { if (e.target === d) d.close(); });     // klik mimo = zavrit
+}
+
 // ── Ovladani ────────────────────────────────────────────────────────────────
 for (const l of LEVELS) {
   const b = document.createElement('button');
-  b.className = 'btn ghost';
+  b.type = 'button';
   b.dataset.level = l.id;
-  b.title = l.hint;
-  b.innerHTML = `${l.id}<span>${l.name}</span>`;
+  b.title = `${l.hint} (${l.id})`;
+  b.innerHTML = `<b>${l.id}</b><small>${l.name}</small>`;
   b.addEventListener('click', () => setLevel(l.id));
   $('levels').append(b);
 }
+function setLevel(id) { state.level = id; prefs.level = id; savePrefs(); applyLevel(); }
+
 $('export').addEventListener('click', () => {
   if (!state.notes.length) return;
   const level = LEVELS.find((l) => l.id === state.level).name;
@@ -143,8 +185,10 @@ $('export').addEventListener('click', () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
 
-function setLevel(id) { state.level = id; prefs.level = id; savePrefs(); applyLevel(); }
-
+const syncPlay = () => {
+  $('play').classList.toggle('playing', player.playing);
+  $('play').setAttribute('aria-label', player.playing ? 'Pauza (mezerník)' : 'Přehrát (mezerník)');
+};
 function togglePlay() {
   if (!state.base.length) return;
   if (player.playing) player.pause();
@@ -152,16 +196,16 @@ function togglePlay() {
     if (state.loopOn && state.loop && (player.now() < state.loop.a || player.now() >= state.loop.b)) player.seek(state.loop.a);
     player.play();
   }
-  $('play').textContent = player.playing ? '⏸' : '▶';
+  syncPlay();
 }
-player.onEnd = () => { $('play').textContent = '▶'; };
+player.onEnd = syncPlay;
 $('play').addEventListener('click', togglePlay);
 $('restart').addEventListener('click', () => player.seek(state.loopOn && state.loop ? state.loop.a : 0));
 
 function updateLoopUi() {
   const l = state.loop;
   $('loop').setAttribute('aria-pressed', String(state.loopOn));
-  $('loop-info').textContent = l ? `${fmt(l.a)}–${fmt(l.b)}` : 'žádný úsek';
+  $('loop-info').textContent = l ? `${fmt(l.a)} – ${fmt(l.b)}` : 'táhni po ose';
   player.loop = state.loopOn && l ? l : null;
 }
 function setLoop(a, b) {
@@ -197,7 +241,7 @@ tl.addEventListener('pointermove', (ev) => {
   const t = tlTime(ev);
   if (Math.abs(t - drag.t0) > state.duration * 0.005) { drag.moved = true; state.loop = { a: Math.min(t, drag.t0), b: Math.max(t, drag.t0) }; state.loopOn = true; updateLoopUi(); }
 });
-tl.addEventListener('pointerup', (ev) => {
+tl.addEventListener('pointerup', () => {
   if (!drag) return;
   if (drag.moved && state.loop) { setLoop(state.loop.a, state.loop.b); player.seek(state.loop.a); }
   else player.seek(drag.t0);
@@ -208,13 +252,14 @@ const bindCheck = (id, key, def, fn) => {
   const el = $(id);
   el.checked = prefs[key] ?? def;
   el.addEventListener('change', () => { prefs[key] = el.checked; savePrefs(); fn?.(); });
+  fn?.();
 };
 bindCheck('letters', 'letters', true);
 bindCheck('fingers', 'fingers', false);
-bindCheck('play-r', 'playR', true, () => { player.mute.R = !$('play-r').checked; });
-bindCheck('play-l', 'playL', true, () => { player.mute.L = !$('play-l').checked; });
-player.mute.R = !$('play-r').checked;
-player.mute.L = !$('play-l').checked;
+bindCheck('echo', 'echo', true);
+bindCheck('mine-r', 'mineR', false, () => player.setMute('R', $('mine-r').checked));
+bindCheck('mine-l', 'mineL', false, () => player.setMute('L', $('mine-l').checked));
+bindCheck('wait', 'wait', false, () => player.setWait($('wait').checked));
 $('naming').value = prefs.naming || 'intl';
 $('naming').addEventListener('change', () => { prefs.naming = $('naming').value; savePrefs(); });
 $('zoom').value = prefs.zoom || 3.5;
@@ -226,38 +271,68 @@ $('speed').addEventListener('input', () => {
   $('speed-out').textContent = `${Math.round(s * 100)} %`;
 });
 
+// ── Hrani: MIDI klavir a klavesnice pocitace ────────────────────────────────
+const PIANO_CODES = /^(Key[AWSEDFTGYHUJKOLPZX]|Semicolon)$/;
+function onNote(p, on, source) {
+  if (on) {
+    const expected = player.waiting?.pitches.has(p) || state.notes.some((n) => n.p === p && Math.abs(n.s - player.now()) < 0.4);
+    state.pressed.set(p, expected || !$('wait').checked ? 'ok' : 'wrong');
+  } else state.pressed.delete(p);
+  player.input(p, on, $('echo').checked && (source === 'keys' || source === 'midi'));
+}
+keyboardInput(onNote, {
+  isActive: () => $('wait').checked && !document.querySelector('dialog[open]'),
+  getOctave: () => state.octave,
+  setOctave: (o) => { state.octave = o; prefs.octave = o; savePrefs(); $('oct').textContent = o; },
+});
+$('oct').textContent = state.octave;
+midiInput(onNote).then((names) => {
+  $('midi-status').textContent = names.length ? `Připojeno: ${names.join(', ')}.` : '';
+});
+
 document.addEventListener('keydown', (e) => {
-  // na tlacitkach a polich ma mezernik/sipky svuj vlastni vyznam
-  if (e.target.closest('input, select, button, summary, textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
-  const k = e.key;
+  const t = e.target;
+  if (t.closest('input[type="text"], input[type="url"], select, textarea, dialog') || e.ctrlKey || e.metaKey || e.altKey) return;
+  if ($('wait').checked && PIANO_CODES.test(e.code)) return;    // pismena patri klaviru
+  const k = e.key.toLowerCase();
+  if (k === ' ' && t.closest('button, input, summary')) return;            // mezernik tlacitko aktivuje samo
+  if (k.startsWith('arrow') && t.matches('input[type="range"]')) return;   // sipky ovladaji posuvnik
   if (k === ' ') { e.preventDefault(); togglePlay(); }
-  else if (k === 'ArrowLeft') player.seek(player.now() - 5);
-  else if (k === 'ArrowRight') player.seek(player.now() + 5);
+  else if (k === 'arrowleft') player.seek(player.now() - 5);
+  else if (k === 'arrowright') player.seek(player.now() + 5);
   else if (k === '[') $('set-a').click();
   else if (k === ']') $('set-b').click();
-  else if (k === 'l' || k === 'L') $('loop').click();
+  else if (k === 'l') $('loop').click();
   else if (k >= '1' && k <= '5') setLevel(Number(k));
-  else if (k === 'p' || k === 'P') $('fingers').click();
-  else if (k === 'n' || k === 'N') $('letters').click();
+  else if (k === 'p') $('fingers').click();
+  else if (k === 'n') $('letters').click();
+  else if (k === 'm') $('wait').click();
+  else if (k === 'k') openLibrary();
   else return;
-  $('play').textContent = player.playing ? '⏸' : '▶';
+  syncPlay();
 });
 
 // ── Smycka vykreslovani ─────────────────────────────────────────────────────
+let lastChord = '';
 function frame() {
   const now = player.now();
   const canvas = $('stage');
   if (state.notes.length) {
+    const waiting = player.waitOn && player.playing ? player.waiting : null;
     draw(canvas, {
       now, notes: state.notes, layout: layoutKeys(state.lo, state.hi, canvas.clientWidth),
       lookahead: 10 / Number($('zoom').value), showLetters: $('letters').checked, naming: $('naming').value,
       showFingers: $('fingers').checked, loop: state.loopOn ? state.loop : null,
-      mute: { L: !$('play-l').checked, R: !$('play-r').checked },
+      mine: { L: $('mine-l').checked, R: $('mine-r').checked }, pressed: state.pressed, waiting,
     });
     drawTimeline(tl, { notes: state.notes, duration: state.duration, now, loop: state.loop, lo: state.lo, hi: state.hi });
-    $('time').textContent = `${fmt(now)} / ${fmt(state.duration)}`;
+    $('time').firstChild.textContent = fmt(now);
+    $('time').lastChild.textContent = `/ ${fmt(state.duration)}`;
     const ch = state.chords.find((c) => c.s <= now && c.e > now);
-    $('chord').textContent = ch ? ch.name : '';
+    const name = ch ? ch.name : '';
+    if (name !== lastChord) { $('chord').textContent = name; lastChord = name; }
+    $('wait-hud').hidden = !waiting;
+    if (waiting) $('wait-notes').textContent = [...waiting.pitches].sort((a, b) => a - b).map((p) => noteName(p, $('naming').value)).join(' ');
   }
   requestAnimationFrame(frame);
 }

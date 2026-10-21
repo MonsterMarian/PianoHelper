@@ -53,6 +53,8 @@ převedená videa.
 - [x] **Export notového zápisu** (MusicXML) s prstokladem. 15 souborů ověřeno přes music21:
       délky taktů, výšky a počty not sedí.
 - [x] Zvuk ověřen měřením signálu na výstupu přehrávače (headless Chrome, 30/30 vzorků).
+- [x] **Režim „čekej na mě“**: čas se zastaví 4 ms před akordem, dokud hráč nezahraje jeho tóny
+      (MIDI nebo klávesnice počítače); špatná klávesa svítí červeně, správné mají kroužek.
 
 ## Plán dalších zlepšení (seřazeno podle přínosu)
 
@@ -65,8 +67,7 @@ převedená videa.
    (Nakamura et al. 2020). Dataset je ke stažení po odsouhlasení licence, to musí udělat
    uživatel.
 3. **Druhý hlas a trioly v notovém zápisu** (viz 06-notovy-zapis.md).
-4. **Režim „čekej na mě“**: přehrávač počká, až zahraješ správné klávesy (Web MIDI nebo
-   klávesnice počítače). Přesně takhle učí Synthesia.
+4. Hodnocení hraní v režimu „čekej na mě“ (přesnost, zpoždění, nejčastější chyby po úsecích).
 5. Volitelná transpozice do „bílé“ tóniny (C dur / a moll) pro úplné začátečníky.
 
 ## Zdroje
