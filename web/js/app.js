@@ -296,10 +296,11 @@ function setLevel(id) { state.level = id; prefs.step = state.levels[id - 1].key;
 $('export').addEventListener('click', () => {
   if (!state.notes.length) return;
   const level = state.levels[state.level - 1].name;
-  const xml = toMusicXML(state.notes, state.grid, `${state.title} (${level})`, state.key);
+  const name = parseTitle(state.title).name;                     // bez "EASY Piano Tutorial..."
+  const xml = toMusicXML(state.notes, state.grid, `${name} (${level})`, state.key);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([xml], { type: 'application/vnd.recordare.musicxml+xml' }));
-  a.download = `${state.title.replace(/[\\/:*?"<>|]+/g, '').slice(0, 80)} - ${level}.musicxml`;
+  a.download = `${name.replace(/[\\/:*?"<>|]+/g, '').slice(0, 80)} - ${level}.musicxml`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });

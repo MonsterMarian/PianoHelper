@@ -97,8 +97,11 @@ export function simplifyMelody(melody, grid, end) {
   for (let i = 0; i + step < beats.length; i += step) {
     const a = beats[i] - 0.15 * T, b = beats[i + step] - 0.15 * T;
     let best = null;
+    const prev = kept[kept.length - 1];
     for (const n of melody) {
       if (n.s < a || n.s >= b) continue;
+      // dlouhy ton na konci predchoziho okna + ton na zacatku tohoto = dva tony tesne po sobe
+      if (prev && n.s - prev.s < Math.max(0.55, 0.75 * step * T)) continue;
       const score = (Math.abs(n.s - beats[i]) < 0.15 * T ? 1 : 0) + Math.min(n.e, beats[i + step]) - n.s;
       if (!best || score > best.score) best = { n, score };
     }

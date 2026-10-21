@@ -182,7 +182,7 @@ Co jsme podle toho změnili (testy v `tests/theory.test.mjs`):
 - **Zbytečné křížení:** podklad / překlad, po kterém se melodie hned obrátí a všechny tři tóny
   se vejdou do 7 půltónů, stojí +2. Ve stupnici ruka pokračuje dál, tady by se jen vrátila.
 - Audit na 19 skladbách × 5 úrovních (znovu převedená knihovna, nové úrovně): „palec na černé
-  v krokové melodii“ 281 → 327 (záměr: palec v poloze), stejný prst v legatu 110 → 90,
+  v krokové melodii“ 281 → 311 (záměr: palec v poloze), stejný prst v legatu 110 → 89,
   rozpětí přes mez 3 → 2. Všech 12 durových stupnic dál podle ABRSM.
 
 ## Omezení a plán

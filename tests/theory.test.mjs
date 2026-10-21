@@ -181,6 +181,14 @@ test('uroven 1: zjednodusena melodie - jen hlavni tony, aspon 0.6 s od sebe', ()
   assert.ok(out.every((n) => n.f >= 1 && n.f <= 5));
 });
 
+test('zacatecnik: dlouhy ton na konci okna + ton na dobe nesmi byt tesne po sobe', async () => {
+  const { simplifyMelody } = await import('../web/js/arrange.js');
+  const grid = { beats: Array.from({ length: 24 }, (_, i) => i * 0.5), beat: 0.5, meter: 4 };
+  const mel = [[60, 0.3, 0.4], [64, 0.8, 1.6], [67, 1.0, 1.4], [65, 2.0, 2.4], [64, 3.0, 3.4]].map(([p, s, e]) => ({ p, s, e, h: 'R' }));
+  const out = simplifyMelody(mel, grid, 4);
+  for (let i = 1; i < out.length; i++) assert.ok(out[i].s - out[i - 1].s >= 0.55, out.map((n) => `${n.p}@${n.s}`).join(' '));
+});
+
 test('uroven 2: melodie + jeden bas na takt, leva ruka pod melodii', () => {
   const { notes } = song();
   const out = arrange(notes, 2);

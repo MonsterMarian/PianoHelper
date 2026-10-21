@@ -103,6 +103,8 @@ noty, žádné pomlky.
   každá snazší úroveň má nejvýš tolik not jako originál a aspoň tolik jako úroveň pod ní;
   Óda a umělá skladba mají originál na 3, středně těžká na 4, hustá na 5,
 - Začátečník = přesně hlavní tóny melodie, vždy jedna nota naráz, ≥ 0,9 s od sebe při 120 BPM,
+- Začátečník: dlouhý tón na konci okna a tón na další době nesmí vyjít těsně po sobě (dřív
+  16 % dvojic v knihovně bylo blíž než 0,55 s, teď žádná),
 - Snadné: levá ruka vždy nejvýš 1 nota a celá pod melodií, v C dur hraje C,
 - Snadné při změně tempa (rubato): bas sedí na skutečné době a každý takt má bas,
 - Óda na radost, Snadné: v každém taktu jeden bas, drží celý takt,
