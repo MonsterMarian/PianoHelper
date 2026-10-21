@@ -11,7 +11,8 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from note_detector import (DetectedNote, DetectorConfig, assign_hands, detect_keyboard,  # noqa: E402
+from types import SimpleNamespace  # noqa: E402
+from note_detector import (DetectedNote, DetectorConfig, _flash_notes, assign_hands, detect_keyboard,  # noqa: E402
                            detect_notes_from_video, drop_bursts, fix_hand_spans, median_frame, parse_note_name)
 
 FPS = 30
@@ -150,6 +151,33 @@ def test_keyboard_without_separator_lines():
     whites = [k for k in kb.keys if not k.is_black]
     assert len(whites) == N_WHITE, len(whites)
     assert whites[0].midi_note == FIRST
+
+
+def test_keyboard_with_vignette_and_glow():
+    # natocene piano (Pianella): klavesy tmavnou ke krajum, nad nimi svitici linka jasnejsi nez klavesy
+    img = np.zeros((H, W, 3), np.uint8)
+    for m, (x0, x1, is_b) in sorted(key_rects().items(), key=lambda kv: kv[1][2]):
+        cv2.rectangle(img, (x0, 300), (x1, 395 if is_b else 470), (20, 20, 20) if is_b else (200, 200, 200), -1)
+    img[294:297] = 255
+    gain = 0.3 + 0.7 * np.sin(np.linspace(0, np.pi, W))           # stred 1.0, kraje 0.3
+    img = (img * gain[None, :, None]).astype(np.uint8)
+    kb = detect_keyboard(img)
+    assert kb is not None and kb.pattern_score == 1.0
+    whites = [k for k in kb.keys if not k.is_black]
+    assert len(whites) == N_WHITE and whites[0].midi_note == FIRST, (len(whites), whites[0].note_name)
+
+
+def test_flash_notes():
+    # nota pri dopadu blikne pres 2 klavesy na kazdou stranu, pak sviti jen ona; opakovany uhoz
+    kb = SimpleNamespace(keys=[SimpleNamespace(midi_note=60 + i) for i in range(12)])
+    g = np.full((40, 12), 70.0)
+    for f0 in (10, 18):
+        g[f0:f0 + 3, 2:7] = 250                                     # zablesk
+        g[f0 + 3:f0 + 6, 4] = 240                                   # nota E4
+    g[16:18, 4] = 170                                               # pohasina, ale konci az dalsim uhozem
+    dt = 1 / 30
+    notes = _flash_notes(g, kb, np.arange(40) * dt, dt)
+    assert [(n.midi_note, round(n.start_time / dt), round(n.end_time / dt)) for n in notes] == [(64, 10, 18), (64, 18, 24)]
 
 
 def test_synthetic_video():

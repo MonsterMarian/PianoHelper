@@ -341,5 +341,6 @@ test('nazvy skladeb z YouTube: bez "EASY Piano Tutorial", nazev + serie', async 
   assert.deepEqual(parseTitle('Sufjan Stevens - Fourth Of July EASY PIANO TUTORIAL'), { name: 'Fourth Of July', series: 'Sufjan Stevens' });
   assert.deepEqual(parseTitle('Óda na radost (Beethoven)'), { name: 'Óda na radost', series: 'Beethoven' });
   assert.equal(parseTitle('Jujutsu Kaisen ED 2 - "give it back" by Cö shu Nie - EASY Piano Tutorial & Sheet Music').name, 'give it back');
+  assert.deepEqual(parseTitle('Avicii - Levels | Piano Cover by Pianella Piano'), { name: 'Levels', series: 'Avicii' });
   assert.equal(youtubeId('https://www.youtube.com/watch?v=_x16Gr3uJf8&list=x'), '_x16Gr3uJf8');
 });

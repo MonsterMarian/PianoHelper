@@ -158,6 +158,30 @@ učebnice také připouští; zbylé „stejné prsty“ jsou přechody mezi roz
 | Ma Meilleure Ennemie, LR: Em – Hm/D – Am/C (staccato) | 5-3-1, 5-3-1, 5-3-1 (posun ruky) | ✔ |
 | obraty v PR: E-G-C / G-C-E, v LR: G-C-E | 1-2-5 / 1-3-5, 5-2-1 | ✔ |
 
+## Srovnání se skutečnou klavíristkou
+
+Avicii – Levels (Pianella Piano, video s rukama, 1080p). Prsty jsme odečítali ze snímků v okamžiku
+úhozu; rozlišení je hraniční, takže jde o odhad, ne o měření.
+
+| pasáž | klavíristka | náš model | shoda |
+|---|---|---|---|
+| levá ruka: kvinta C♯4–G♯4, oktávy E2–E3, H1–H2 | 5-1 | 5-1 | ✔ |
+| levá ruka: E2, pak H2+E3 | 5, pak 2-1 (palec připravený na E3) | 5, pak 2-1 | ✔ |
+| pravá ruka: akord G♯4-H4-E5 | 1-2-5 | 1-2-5 | ✔ |
+| pravá ruka: oktávy E5–E6 | 1-5 | 1-5 | ✔ |
+| úvod, pravá: C♯6, pak E6+G♯6 dokola | ruka v jedné poloze: **palec na C♯6**, 2 na E6, 3 (4) na G♯6 | 2 na C♯6, 3-5 na E6+G♯6 | ✘ |
+| melodie dolů G♯5 F♯5 E5 C♯5 | ruka stojí, C♯5 ukazovákem, E5 prostředníkem | E5 palcem, pak C♯5 dvojkou přes palec | ✘ |
+
+Co z toho plyne:
+
+- **Palec na černé klávese v melodii** trestáme moc (5 bodů). Klavíristka ho bez problému dá na
+  C♯, když ruka stojí na místě a nemusí se přes palec nic podkládat. Učebnicové pravidlo „palec
+  ne na černou“ platí hlavně pro stupnice a běhy, kde se palec podkládá.
+- **Poloha ruky:** když se motiv vejde do pěti prstů, klavíristka nechá ruku stát a nepřekládá.
+  Model občas zvolí podklad nebo překlad uvnitř polohy. V této skladbě je to vzácné (pravá ruka
+  11 z 627 jednotlivých tónů), ale je to vidět.
+- Akordy, oktávy a levá ruka odpovídají.
+
 ## Omezení a plán
 
 - Pravidla neznají **tempo**. U rychlých opakovaných tónů pianisté střídají prsty (3-2-1);

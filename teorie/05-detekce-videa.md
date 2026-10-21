@@ -42,18 +42,36 @@ kláves místo kláves.
    snímek: opakované tóny mají mezeru 1–3 snímky. Začátky akordu do 1,5 snímku se sjednotí.
 9. **Ruce podle barvy** (viz [03-ruce.md](03-ruce.md)).
 
+### Natočené piano s rukama (Pianella apod.)
+
+Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku a při dopadu bliknou.
+
+- **Klávesnice:** linka nad klávesami je jasnější než šedavé bílé klávesy. Mediánový filtr přes
+  ~1/60 výšky obrazu ji smaže, takže se jako pás bílých kláves najdou klávesy. Obraz tmavne ke
+  krajům (vinětace), proto se sloupce před hledáním kláves zesvětlí podle obálky jasu bílých
+  kláves (nejvýš 4×).
+- **Poznání:** u Synthesie se linka nad klávesou mění 2–3× víc než klávesa. Když se klávesy mění
+  víc než linka, zakrývají je ruce a noty se čtou ze záblesků nad klávesnicí.
+- **Záblesk** při dopadu rozsvítí i 2 sousední klávesy na každou stranu, ale jen na 3 snímky.
+  Nota = skok jasu (začátek) + klávesa, která svítí ještě 0,15 s potom a víc než oba sousedé.
+  Opakovaný akord nezhasne, proto nota končí i dalším skokem jasu. Bílá klávesa se měří jen
+  v části, nad kterou nedopadají černé noty.
+
 ## Výsledky
 
 | video | styl | klávesy | not | čas |
 |---|---|---|---|---|
 | Fourth of July (UVnXmLGu4cI) | černé pozadí, popisky pod klávesami, 2 barvy | E2–D6, vzor 100 % | 734, ruce L 172 / R 557 | ~30 s / 5,5 min videa |
 | Ma Meilleure Ennemie (SFyKbYbpHkc) | obrázek na pozadí, poloprůhledná klávesnice, krátké noty s písmenem | A2–F♯6, vzor 100 % | 1138 | ~40 s / 2,5 min |
+| Avicii – Levels, Pianella (PSolYNrEiWc) | natočené piano s rukama, vinětace, záblesky | A0–C8, vzor 100 % | 2530; kontrola proti zvuku: 98 % not zní | ~1 min / 3,5 min |
 | syntetické (test) | známé noty | E2–D6 | 12/12, začátky ±1 snímek, ruce 12/12 | 1 s |
 
 ## Omezení
 
-- Potřebuje klávesnici ve videu, která se barví (nebo noty dopadající na linii). Videa reálného
-  piána převádí `--audio` (basic-pitch), což je méně přesné.
+- Potřebuje klávesnici ve videu, která se barví, nebo noty dopadající na linii (i u natočeného
+  piana). Videa bez padajících not převádí `--audio` (basic-pitch), což je méně přesné.
+- Záblesky: dvě sousední půltónové noty naráz se poznají jako jedna; bílá klávesa mezi dvěma
+  černými notami občas vyjde navíc (~2 % not).
 - Rychlost = rychlost dekódování videa (~3,5 ms/snímek při 480p).
 - Pokud video celou dobu nemá zvuk, oktáva zůstane odhadem. Dá se zadat ručně
   `--start-note E2` (nejlevější bílá klávesa).

@@ -251,12 +251,20 @@ def detect_keyboard(frame: np.ndarray, config: Optional[DetectorConfig] = None) 
     # 1) Pas bilych klaves: nejdelsi blok svetlych radku ve spodnich 70 % obrazu.
     bright = (gray > 170).mean(axis=1)
     bright[: int(h * 0.3)] = 0
+    # Median pres par radku smaze tenkou zarici linku nad klavesami (natocene piano ma sedave
+    # klavesy a linka by vyhrala jako "nejsvetlejsi pas").
+    k = max(3, h // 60) | 1
+    bright = np.median(np.lib.stride_tricks.sliding_window_view(np.pad(bright, k // 2, mode='edge'), k), axis=1)
     if bright.max() < 0.3:
         return None
     runs = _runs(bright > bright.max() * 0.85, merge_gap=max(2, h // 80))
     wy0, wy1 = max(runs, key=lambda r: r[1] - r[0])
     if wy1 - wy0 < max(4, h // 60):
         return None
+
+    # Vinetace (natocene piano tmavne ke krajum): zesvetlit sloupce podle obalky pasu bilych klaves.
+    env = cv2.dilate(gray[wy0:wy1].mean(axis=0, keepdims=True), np.ones((1, max(3, w // 30)), np.uint8))[0]
+    gray = np.minimum(gray * np.clip(230 / np.maximum(env, 1), 1, 4)[None, :], 255)
 
     # Vodorovny rozsah klavesnice = sloupce, ktere jsou v pasu bile svetle.
     white_prof = gray[wy0:wy1].mean(axis=0)
@@ -376,6 +384,63 @@ def _hit_line_colors(frame, kb, ranges) -> np.ndarray:
     prof = cv2.reduce(frame[max(0, y1 - 5):y1], 0, cv2.REDUCE_AVG, dtype=cv2.CV_32F)[0]
     cs = np.vstack([np.zeros((1, 3)), np.cumsum(prof, axis=0)])
     return (cs[ranges[:, 1]] - cs[ranges[:, 0]]) / (ranges[:, 1] - ranges[:, 0])[:, None]
+
+
+def _flash_ranges(kb: KeyboardLayout) -> np.ndarray:
+    """Sloupce pro cteni nad klavesnici: bila klavesa bez casti, nad kterou dopadaji cerne noty."""
+    blacks = [(k.x_left, k.x_right) for k in kb.keys if k.is_black]
+    out = []
+    for k in kb.keys:
+        a, b = k.x_left, k.x_right
+        if k.is_black:
+            m = max(1, (b - a) // 4)
+            out.append((a + m, b - m))
+            continue
+        for bl, br in blacks:
+            if bl <= a < br:
+                a = br
+            elif bl < b <= br:
+                b = bl
+        out.append((a + 1, max(a + 2, b - 1)))
+    return np.array(out)
+
+
+def _band_luma(frame, y1: int, ranges) -> np.ndarray:
+    """Prumerny jas 3 radku nad y1 pro kazdou klavesu -> (n_keys,)."""
+    prof = cv2.reduce(cv2.cvtColor(frame[y1 - 3:y1], cv2.COLOR_BGR2GRAY), 0, cv2.REDUCE_AVG, dtype=cv2.CV_32F)[0]
+    cs = np.concatenate([[0.0], np.cumsum(prof)])
+    return (cs[ranges[:, 1]] - cs[ranges[:, 0]]) / (ranges[:, 1] - ranges[:, 0])
+
+
+def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float,
+                 rise: float = 30, keep: float = 100, post_s: float = 0.15) -> List[DetectedNote]:
+    """
+    Noty z pasu tesne nad klavesnici ve videich, kde nota pri dopadu blikne pres 2 klavesy
+    na kazdou stranu (Pianella apod.). Zacatek = skok jasu; nota = klavesa, ktera sviti
+    i po zablesku a sviti vic nez oba sousede (zare od vedlejsi noty je slabsi).
+    Opakovany akord nikdy nezhasne, proto konci nota i dalsim skokem jasu.
+    shortcut: dve sousedni pultonove noty naraz se rozpoznaji jen jako jedna, upravit az bude vadit.
+    """
+    n, K = g.shape
+    post = max(1, int(round(post_s / dt)))
+    base = np.percentile(g, 20, axis=0)
+    up = np.zeros_like(g, bool)
+    up[1:] = g[1:] - g[:-1] > rise
+    up[1:] &= ~up[:-1]                       # zablesk trva par snimku - jen prvni
+    notes = []
+    for t, k in zip(*np.where(up)):
+        tp = min(n - 1, t + post)
+        if g[tp, k] - base[k] < keep:
+            continue
+        if g[tp, k] < max(g[tp, max(0, k - 1)], g[tp, min(K - 1, k + 1)]) - 1:
+            continue
+        e = tp
+        while e + 1 < n and g[e + 1, k] - base[k] >= keep and not up[e + 1, k]:
+            e += 1
+        notes.append(DetectedNote(midi_note=kb.keys[k].midi_note, start_time=round(float(times[t]), 4),
+                                  end_time=round(float(times[e] + dt), 4)))
+    notes.sort(key=lambda n: (n.start_time, n.midi_note))
+    return drop_bursts(notes)
 
 
 def _changed(colors: np.ndarray, fps_eff: float, threshold: float, window_s: float = 8.0) -> np.ndarray:
@@ -582,8 +647,9 @@ def detect_notes_from_video(video_path: str, config: Optional[DetectorConfig] = 
 
     white_rows, black_rows, ranges = _key_samplers(kb)
     is_black = np.array([k.is_black for k in kb.keys])
+    flash_y, flash_rg = kb.keyboard_top - max(4, int(cap.get(4)) // 60), _flash_ranges(kb)
 
-    colors, hits, times = [], [], []
+    colors, hits, flashes, times = [], [], [], []
     idx = 0
     while True:
         ok = cap.grab()
@@ -595,6 +661,7 @@ def detect_notes_from_video(video_path: str, config: Optional[DetectorConfig] = 
                 break
             colors.append(_key_colors(frame, kb, white_rows, black_rows, ranges, is_black))
             hits.append(_hit_line_colors(frame, kb, ranges))
+            flashes.append(_band_luma(frame, flash_y, flash_rg))
             times.append(idx / fps)
             if progress_callback and len(times) % 300 == 0:
                 progress_callback(min(99.0, 100.0 * idx / max(1, total)), f"snimek {idx}/{total}")
@@ -608,11 +675,16 @@ def detect_notes_from_video(video_path: str, config: Optional[DetectorConfig] = 
     dt = config.frame_skip / fps
     lit = _changed(colors, 1 / dt, config.lit_threshold)
     hit = _changed(np.stack(hits).astype(np.float32), 1 / dt, config.lit_threshold)
-    if lit.mean() * 5 < hit.mean():
-        print("  Klavesy se v tomto videu nebarvi - ctu noty z linie dopadu")
-        lit = hit
-
-    notes = _active_to_notes(lit, colors, kb, times, dt, config.min_note_duration)
+    if lit.mean() > hit.mean():
+        # Synthesia: linie nad klavesou je aktivni aspon tak dlouho jako klavesa (0,3-0,55x).
+        # Klavesy se meni vic nez linie = natocene ruce, ktere klavesy zakryvaji.
+        print("  Klavesy zakryvaji ruce - ctu noty ze zablesku nad klavesnici")
+        notes = _flash_notes(np.stack(flashes), kb, times, dt)
+    else:
+        if lit.mean() * 5 < hit.mean():
+            print("  Klavesy se v tomto videu nebarvi - ctu noty z linie dopadu")
+            lit = hit
+        notes = _active_to_notes(lit, colors, kb, times, dt, config.min_note_duration)
     if config.split_hands and assign_hands(notes):
         print(f"\n  Ruce podle barvy: L={sum(n.hand == 'L' for n in notes)}, R={sum(n.hand == 'R' for n in notes)}")
         moved = fix_hand_spans(notes)

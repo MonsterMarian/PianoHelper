@@ -2,7 +2,7 @@
 // Tutorial & Sheet Music" -> { name: 'Kaikai Kitan', series: 'Jujutsu Kaisen OP' }.
 const NOISE = [
   /\[\s*full\s*\]/gi, /\bEASY\b.*$/i, /\bpiano tutorial\b.*$/i, /&\s*sheet music/gi, /\bsheet music\b/gi,
-  /\(\s*official.*?\)/gi, /\btutorial\b/gi,
+  /\(\s*official.*?\)/gi, /\btutorial\b/gi, /\bpiano cover\b.*$/i,
 ];
 
 export function parseTitle(title) {
