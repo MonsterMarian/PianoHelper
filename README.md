@@ -26,14 +26,16 @@ python main.py --local video.mp4 --start-note E2      # nejlevější bílá kl�
 |---|---|
 | Padající noty s **písmenem** na notě | „Písmena“; názvy C D E F G A B, česky (H) nebo Do Re Mi (nastavení) |
 | **5 obtížností** | 1 Melodie · 2 Snadné · 3 Střední · 4 Originál · 5 Pokročilé (klávesy 1–5) |
-| **Úsek** na opakování | táhni po časové ose, nebo A / B (klávesy `[` `]`), Opakovat (L) |
+| **Úsek** na opakování — po taktech | „Opakovat“ (L) = úsek od aktuálního taktu; ‹ › nebo `[` `]` = předchozí/další úsek; délka 1/2/4/8 taktů. Na časové ose: tažení = nový úsek, úchyty = okraje, tažení uvnitř = posun, klik mimo = konec opakování. Každé opakování začne o dobu dřív (předehra) |
+| **Pohled** (V) | šířka piana, délka not (jen vzhled — kratší noty padají pomaleji, tempo hudby se nemění), výška pádu, výška klaviatury |
+| **Režim jeviště** (F) | celá obrazovka jen pro noty, malý ovladač nahoře, Esc = konec |
 | **Prstoklad** | „Prsty“ (P): číslo prstu na notě i na stisknuté klávese |
 | **Čekej na mě** | přehrávač počká, až zahraješ správné tóny — MIDI klavír nebo klávesnice počítače (A W S E D F T G Y H U J K = C…C, Z/X oktáva) |
 | Nácvik po rukou | „Hraju já: Pravá / Levá“ — tu ruku hraješ sám, druhá zní a je ztlumená |
 | **Kolik piana je vidět** | „Klaviatura“: 88 / 76 / 61 (výchozí, jako ve videích) / 49 kláves / podle skladby; v minimapě táhni výřez, za okraj měníš velikost. Noty mimo výřez ukazuje šipka na okraji |
 | Orientace | tečka na C4, popisky C3/C4/C5, velký název akordu na scéně |
 | **Notový zápis** s prstokladem | Nastavení → „Stáhnout notový zápis (MusicXML)“ → MuseScore |
-| Tempo 25–150 %, rychlost pádu, hlasitost | posuvníky |
+| Tempo 25–150 %, hlasitost | posuvníky; ←/→ = takt zpět/vpřed |
 
 Přehrávač je statický web (HTML + JS moduly bez buildu). Klavír zní ze vzorků
 [Salamander Grand Piano](https://tonejs.github.io/audio/salamander/) (CC-BY), takže je potřeba

@@ -26,6 +26,12 @@
         <div><dt>Tempo</dt><dd id="m-bpm">—</dd></div>
         <div><dt>Takt</dt><dd id="m-meter">—</dd></div>
       </dl>
+      <button id="view-open" class="icon-btn" aria-expanded="false" aria-controls="view-panel" aria-label="Pohled: šířka piana, délka not, výška pádu (V)" title="Pohled (V)">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M8 7v6M12 7v9M16 7v4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      </button>
+      <button id="fullscreen" class="icon-btn" aria-label="Celá obrazovka (F)" title="Celá obrazovka (F)">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+      </button>
       <button id="settings-open" class="icon-btn" aria-haspopup="dialog" aria-label="Nastavení">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="16" cy="7" r="2" stroke="currentColor" stroke-width="1.6" fill="none"/><circle cx="8" cy="17" r="2" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>
       </button>
@@ -34,6 +40,28 @@
     <main class="stage">
       <canvas id="stage" aria-label="Padající noty a klaviatura"></canvas>
       <div id="chord" class="chord" aria-hidden="true"></div>
+      <div id="view-panel" class="view-panel" hidden>
+        <span class="eyebrow">Pohled</span>
+        <label class="field"><span class="label">Šířka piana <output id="width-out"></output></span>
+          <input id="piano-width" type="range" min="35" max="100" step="1" value="100"></label>
+        <label class="field"><span class="label">Délka not <output id="pps-out"></output></span>
+          <input id="pps" type="range" min="40" max="480" step="10" value="160"></label>
+        <label class="field"><span class="label">Výška pádu <output id="fall-out"></output></span>
+          <input id="fall" type="range" min="25" max="100" step="1" value="100"></label>
+        <label class="field"><span class="label">Výška klaviatury <output id="kb-out"></output></span>
+          <input id="kb-height" type="range" min="8" max="35" step="1" value="22"></label>
+        <p class="hint">Délka not mění jen vzhled: kratší noty padají pomaleji, hudba hraje stejně rychle. Noty uvidíš dřív s menší klaviaturou nebo v režimu jeviště (F) — schová ovládání.</p>
+        <button id="view-reset" class="key-btn" type="button">Výchozí</button>
+      </div>
+      <div class="stage-bar" role="group" aria-label="Ovládání v režimu jeviště">
+        <button id="sb-play" class="play small" aria-label="Přehrát / pauza (mezerník)">
+          <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>
+          <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" fill="currentColor"/></svg>
+        </button>
+        <output id="sb-time" class="readout small">0:00</output>
+        <output id="sb-loop" class="loop-readout"></output>
+        <button id="sb-exit" class="key-btn" type="button" title="Ukončit režim jeviště (F / Esc)">Ukončit</button>
+      </div>
       <div id="wait-hud" class="wait-hud" hidden>
         <span class="eyebrow">Zahraj</span>
         <span id="wait-notes" class="wait-notes"></span>
@@ -49,10 +77,20 @@
     <footer class="deck">
       <div class="scrub">
         <div class="loop-ctrl" role="group" aria-label="Opakování úseku">
-          <button id="set-a" class="key-btn square" title="Začátek úseku ( [ )">A</button>
-          <button id="set-b" class="key-btn square" title="Konec úseku ( ] )">B</button>
-          <button id="loop" class="key-btn" aria-pressed="false" title="Opakovat úsek (L)">Opakovat</button>
-          <span id="loop-info" class="hint">táhni po ose</span>
+          <button id="loop" class="key-btn" aria-pressed="false" title="Opakovat úsek (L)">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 12a7 7 0 0 1 12-5l2 2M20 12a7 7 0 0 1-12 5l-2-2M18 4v5h-5M6 20v-5h5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            Opakovat
+          </button>
+          <button id="loop-prev" class="key-btn square" aria-label="Předchozí úsek ([)" title="Předchozí úsek ( [ )">‹</button>
+          <output id="loop-info" class="loop-readout">Takty —</output>
+          <button id="loop-next" class="key-btn square" aria-label="Další úsek (])" title="Další úsek ( ] )">›</button>
+          <select id="loop-len" aria-label="Délka úseku" title="Délka úseku">
+            <option value="1">1 takt</option>
+            <option value="2" selected>2 takty</option>
+            <option value="4">4 takty</option>
+            <option value="8">8 taktů</option>
+            <option value="custom" hidden>vlastní</option>
+          </select>
         </div>
         <canvas id="timeline" class="timeline" aria-label="Časová osa: klik = skok, tažení = výběr úseku"></canvas>
         <div class="range-ctrl">
@@ -146,7 +184,6 @@
           <option value="solfege">Do Re Mi</option>
         </select>
       </label>
-      <label class="field"><span class="label">Rychlost pádu</span><input id="zoom" type="range" min="1.5" max="8" step="0.5" value="3.5"></label>
       <label class="field"><span class="label">Hlasitost</span><input id="volume" type="range" min="0" max="1" step="0.05" value="0.8"></label>
       <label class="chip wide"><input id="echo" type="checkbox" checked><span>Ozvučit moje hraní</span></label>
 
@@ -169,7 +206,7 @@
 
       <section class="field">
         <span class="label">Zkratky</span>
-        <p class="hint">Mezerník hrát · ← → ±5 s · [ ] úsek · L opakovat · 1–5 obtížnost · P prsty · N písmena · M čekej na mě · K knihovna (v režimu čekání patří písmena klavíru)</p>
+        <p class="hint">Mezerník hrát · ← → takt zpět/vpřed · [ ] předchozí/další úsek · L opakovat · V pohled · F celá obrazovka · 1–5 obtížnost · P prsty · N písmena · M čekej na mě · K knihovna (v režimu čekání patří písmena klavíru)</p>
       </section>
     </div>
   </dialog>

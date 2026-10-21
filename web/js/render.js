@@ -7,7 +7,7 @@ function colors() {
   const v = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
   C = {
     R: v('--rh'), Rd: v('--rh-deep'), L: v('--lh'), Ld: v('--lh-deep'), stage: v('--stage'),
-    accent: v('--accent'), paper: v('--paper'), ink: v('--ink-on-note'), wrong: v('--wrong'),
+    accent: v('--accent'), paper: v('--paper'), ink: v('--ink-on-note'), wrong: v('--wrong'), muted: v('--muted'),
   };
   return C;
 }
@@ -87,21 +87,34 @@ let sparkNotes = null;
 let lastNow = 0;
 
 /**
- * opts: { now, notes, layout, lookahead (s), showLetters, naming, showFingers, loop,
+ * opts: { now, notes, range: [lo, hi], widthFrac (0-1 sirka piana), pps (pixelu za sekundu = delka not),
+ *         fallFrac (0-1 vyska padu), kbFrac (vyska klaviatury jako podil vysky sceny), showLetters, naming, showFingers, loop,
  *         mine: {L, R} (ruce, ktere hraje uzivatel), pressed: Map(p -> 'ok'|'wrong'), waiting: {pitches} | null }
+ * Vraci { lookahead } - kolik sekund dopredu je videt.
  */
 export function draw(canvas, opts) {
-  const { ctx, W, H } = fitCanvas(canvas);
+  const { ctx, W: fullW, H } = fitCanvas(canvas);
   const c = colors();
-  const { now, notes, layout, lookahead, showLetters, naming, showFingers, loop, mine, pressed, waiting } = opts;
-  const kbH = Math.min(150, Math.max(80, H * 0.22));
+  const { now, notes, range, widthFrac = 1, pps = 160, fallFrac = 1, kbFrac = 0.22, showLetters, naming, showFingers, loop, mine, pressed, waiting } = opts;
+  const W = Math.round(fullW * widthFrac);                   // sirka piana (zuzene piano je uprostred)
+  const ox = Math.round((fullW - W) / 2);
+  const layout = layoutKeys(range[0], range[1], W);
+  const kbH = Math.round(Math.min(260, Math.max(50, H * kbFrac)));
   const hitY = H - kbH;
-  const pps = (hitY - 8) / lookahead;
+  const fallTop = Math.round(hitY - (hitY - 8) * fallFrac);   // odsud noty padaji
+  const lookahead = (hitY - fallTop) / pps;
   const t = performance.now() / 1000;
   const someMine = mine.L || mine.R;
 
   ctx.fillStyle = c.stage;
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(0, 0, fullW, H);
+  ctx.save();
+  ctx.translate(ox, 0);
+  if (ox > 0) {                                               // okraje mimo piano
+    ctx.fillStyle = 'rgba(255,255,255,0.025)';
+    ctx.fillRect(-1, 0, 1, H);
+    ctx.fillRect(W, 0, 1, H);
+  }
 
   // drahy cernych klaves a cary u C
   for (const [p, k] of layout.keys) {
@@ -170,9 +183,10 @@ export function draw(canvas, opts) {
     const x = k.x + pad, w = k.w - 2 * pad;
     const isActive = n.s <= now && n.e > now;
     if (isActive) active.set(n.p, n);
-    const dim = someMine && !mine[hand];
+    const outside = loop && (n.s >= loop.b - 1e-3 || n.e <= loop.a + 1e-3);   // mimo opakovany usek
+    const dim = (someMine && !mine[hand]) || outside;
 
-    ctx.globalAlpha = dim ? 0.32 : 1;
+    ctx.globalAlpha = outside ? 0.2 : dim ? 0.32 : 1;
     const g = ctx.createLinearGradient(0, yBottom - h, 0, yBottom);
     g.addColorStop(0, c[hand + 'd']);
     g.addColorStop(1, k.black ? c[hand + 'd'] : c[hand]);
@@ -299,6 +313,21 @@ export function draw(canvas, opts) {
       }
     }
   }
+
+  // vyska padu: nad ni noty nejsou videt, prechod je jemne rozmazany
+  if (fallTop > 8) {
+    ctx.fillStyle = c.stage;
+    ctx.fillRect(-ox, 0, fullW, fallTop - 24);
+    const fade = ctx.createLinearGradient(0, fallTop - 24, 0, fallTop + 8);
+    fade.addColorStop(0, c.stage);
+    fade.addColorStop(1, 'rgba(12,11,9,0)');
+    ctx.fillStyle = fade;
+    ctx.fillRect(-ox, fallTop - 24, fullW, 32);
+    ctx.fillStyle = 'rgba(239,233,220,0.12)';
+    ctx.fillRect(0, fallTop, W, 1);
+  }
+  ctx.restore();
+  return { lookahead };
 }
 
 // Minimapa celeho piana (88 klaves): viditelny vyrez + rozsah skladby.
@@ -331,27 +360,50 @@ export function drawKeyMap(canvas, { lo, hi, songLo, songHi }) {
   return map;
 }
 
-// Casova osa: nahled vsech not, odehrana cast, smycka, pozice.
-export function drawTimeline(canvas, { notes, duration, now, loop, lo, hi }) {
+// Casova osa: takty, nahled not, usek s uchyty, pozice.
+export const HANDLE = 7;                  // sirka uchytu useku v px (i pro klikani)
+export function drawTimeline(canvas, { notes, duration, now, loop, loopOn, bars, lo, hi }) {
   const { ctx, W, H } = fitCanvas(canvas);
   const c = colors();
   ctx.clearRect(0, 0, W, H);
   const x = (t) => (t / (duration || 1)) * W;
   const range = Math.max(1, hi - lo);
-  const px = x(now);
+  const top = 13;                         // nahore cisla taktu, pod nimi noty
+
+  // takty: carka u kazdeho, cislo tak husto, jak se vejde
+  if (bars?.length) {
+    const every = [1, 2, 4, 8, 16, 32, 64].find((k) => (x(bars[Math.min(k, bars.length - 1)]) - x(bars[0])) >= 26) || 64;
+    ctx.font = '500 9px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'left';
+    for (let i = 0; i < bars.length - 1; i++) {
+      const bx = Math.round(x(bars[i])) + 0.5;
+      const major = i % every === 0;
+      ctx.fillStyle = major ? 'rgba(239,233,220,0.22)' : 'rgba(239,233,220,0.07)';
+      ctx.fillRect(bx, major ? 0 : top, 1, major ? H : H - top);
+      if (major) { ctx.fillStyle = c.muted || '#7a7366'; ctx.fillText(String(i + 1), bx + 3, 2); }
+    }
+  }
+
   for (const n of notes) {
     ctx.fillStyle = n.h === 'L' ? c.L : c.R;
     ctx.globalAlpha = n.s < now ? 0.95 : 0.35;
-    ctx.fillRect(x(n.s), H - 4 - ((n.p - lo) / range) * (H - 8), Math.max(1, x(n.e) - x(n.s)), 1.5);
+    ctx.fillRect(x(n.s), H - 4 - ((n.p - lo) / range) * (H - top - 8), Math.max(1, x(n.e) - x(n.s)), 1.5);
   }
   ctx.globalAlpha = 1;
+
   if (loop) {
-    ctx.fillStyle = 'rgba(255,79,31,0.16)';
-    ctx.fillRect(x(loop.a), 0, x(loop.b) - x(loop.a), H);
-    ctx.fillStyle = c.accent;
-    ctx.fillRect(x(loop.a) - 1, 0, 2, H);
-    ctx.fillRect(x(loop.b) - 1, 0, 2, H);
+    const xa = x(loop.a), xb = x(loop.b);
+    ctx.fillStyle = loopOn ? 'rgba(255,79,31,0.16)' : 'rgba(239,233,220,0.06)';
+    ctx.fillRect(xa, 0, xb - xa, H);
+    ctx.fillStyle = loopOn ? c.accent : 'rgba(239,233,220,0.45)';
+    for (const hx of [xa, xb]) {                              // uchyty
+      ctx.fillRect(hx - 1, 0, 2, H);
+      ctx.fillRect(hx - HANDLE / 2, H / 2 - 9, HANDLE, 18);
+    }
+    ctx.fillStyle = loopOn ? '#1a0b05' : '#0c0b09';
+    for (const hx of [xa, xb]) { ctx.fillRect(hx - 1.5, H / 2 - 4, 1, 8); ctx.fillRect(hx + 0.5, H / 2 - 4, 1, 8); }
   }
   ctx.fillStyle = c.paper;
-  ctx.fillRect(px - 0.75, 0, 1.5, H);
+  ctx.fillRect(x(now) - 0.75, 0, 1.5, H);
 }

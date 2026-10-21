@@ -266,3 +266,22 @@ test('rozsah klaviatury: standardni velikosti, posun za skladbou, vlastni', asyn
   assert.equal(whites(keyRange('88', 60, 72)), 52);
   assert.equal(whites(keyRange('61', 60, 72)), 36);
 });
+
+test('usek po taktech: prichyceni, posun, okraje skladby', async () => {
+  const { barTimes, barAt, loopBars, loopFromTimes, shiftLoop } = await import('../web/js/loop.js');
+  const grid = { beats: Array.from({ length: 40 }, (_, i) => 1 + i * 0.5), meter: 4, beat: 0.5 };   // takt = 2 s, od 1.0 s
+  const bars = barTimes(grid, 20.5);
+  assert.deepEqual(bars.slice(0, 4), [1, 3, 5, 7]);
+  assert.ok(bars[bars.length - 1] >= 20.5);
+  assert.equal(barAt(bars, 0.2), 0);
+  assert.equal(barAt(bars, 3), 1);
+  assert.equal(barAt(bars, 6.9), 2);
+  // tazeni 4.2 s -> 8.1 s = takty 2 az 4 (indexy 1..3), zacina/konci na hranach taktu
+  assert.deepEqual(loopFromTimes(bars, 8.1, 4.2), { from: 1, to: 4, a: 3, b: 9 });
+  const l = loopBars(bars, 0, 2);
+  assert.deepEqual(shiftLoop(bars, l, 1), { from: 2, to: 4, a: 5, b: 9 });
+  assert.deepEqual(shiftLoop(bars, l, -1), l);                            // na zacatku se nepohne
+  const end = shiftLoop(bars, loopBars(bars, bars.length - 3, bars.length - 1), 1);
+  assert.equal(end.to, bars.length - 1);                                   // na konci se nepohne dal
+  assert.equal(loopBars(bars, 5, 5).to, 6);                                // aspon 1 takt
+});

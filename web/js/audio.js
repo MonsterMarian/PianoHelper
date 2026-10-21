@@ -12,7 +12,7 @@ export class Player {
     this.position = 0;          // cas skladby, kdyz se nehraje
     this.playing = false;
     this.speed = 1;
-    this.loop = null;           // { a, b } nebo null
+    this.loop = null;           // { a, b, pre } nebo null (pre = predehra v s)
     this.mute = { L: false, R: false };   // ruka, kterou hraje uzivatel (nezni z reproduktoru)
     this.waitOn = false;
     this.groups = [];           // akordy, na ktere se ceka: [{ t, pitches: Set }]
@@ -131,11 +131,13 @@ export class Player {
     let t = this.now();
     const end = this.loop ? this.loop.b : (this.notes.length ? this.notes[this.notes.length - 1].e + 0.5 : 0);
     if (t >= end) {
-      if (this.loop) { this.position = this.loop.a; this.restart(); t = this.position; }
+      // opakovani: zacit o predehru drive (noty pred usekem nezni), at je cas se pripravit
+      if (this.loop) { this.position = this.loop.a - (this.loop.pre || 0); this.restart(); t = this.position; }
       else { this.pause(); this.position = 0; this.onEnd?.(); return; }
     }
     let horizon = t + 0.15 * this.speed;
     if (this.waitOn) {
+      while (this.loop && this.groups[this.gi] && this.groups[this.gi].t < this.loop.a - 0.001) this.gi++;
       const g = this.groups[this.gi];
       // cas se zastavi 4 ms pred akordem: noty jsou na linii, ale jeste "nezni" (klavesy nesviti)
       if (g && t >= g.t - 0.005) {
@@ -157,7 +159,7 @@ export class Player {
     }
     while (this.next < this.notes.length && this.notes[this.next].s < horizon) {
       const n = this.notes[this.next++];
-      if (this.mute[n.h === 'L' ? 'L' : 'R'] || (this.loop && n.s >= this.loop.b)) continue;
+      if (this.mute[n.h === 'L' ? 'L' : 'R'] || (this.loop && (n.s >= this.loop.b || n.s < this.loop.a - 0.001))) continue;
       const when = this.anchorCtx + (n.s - this.anchorSong) / this.speed;
       let dur = (n.e - n.s) / this.speed;
       if (this.loop) dur = Math.min(dur, (this.loop.b - n.s) / this.speed);
