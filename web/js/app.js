@@ -6,7 +6,7 @@ import { barTimes, barAt, loopBars, loopFromTimes, shiftLoop } from './loop.js';
 import { songEnd, noteName, isBlack } from './music.js';
 import { toMusicXML } from './musicxml.js';
 import { keyboardInput, midiInput } from './input.js';
-import { handWindows } from './hands.js';
+import { fingerTargets } from './hands.js';
 
 const $ = (id) => document.getElementById(id);
 const player = new Player();
@@ -223,6 +223,15 @@ async function pollJob(id) {
 // ── Dialogy ─────────────────────────────────────────────────────────────────
 const openLibrary = () => $('library').showModal();
 $('library-open').addEventListener('click', openLibrary);
+$('library-btn').addEventListener('click', openLibrary);
+function stepSong(dir) {
+  const list = state.library;
+  if (!list.length) return;
+  const i = list.findIndex((x) => x.file === state.file);
+  loadSongFile(list[(i + dir + list.length) % list.length].file);
+}
+$('song-prev').addEventListener('click', () => stepSong(-1));
+$('song-next').addEventListener('click', () => stepSong(1));
 document.querySelectorAll('[data-open-library]').forEach((b) => b.addEventListener('click', openLibrary));
 $('settings-open').addEventListener('click', () => $('settings').showModal());
 document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => b.closest('dialog').close()));
@@ -559,7 +568,7 @@ function frame() {
       showLetters: $('letters').checked, naming: $('naming').value,
       showFingers: $('fingers').checked, loop: state.loopOn ? state.loop : null,
       mine: { L: $('mine-l').checked, R: $('mine-r').checked }, pressed: state.pressed, waiting,
-      handWin: $('hand-pos').checked ? handWindows(state.notes, now) : null,
+      targets: $('hand-pos').checked ? fingerTargets(state.notes, now) : null,
     }).lookahead;
     clampView();
     if (!drag && !ovDrag && performance.now() > tlView.manualUntil) showInTimeline(now);

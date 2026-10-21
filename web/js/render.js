@@ -1,6 +1,5 @@
 // Vykresleni padajicich not a klaviatury na canvas.
 import { isBlack, noteName } from './music.js';
-import { whiteIndex } from './hands.js';
 
 let C = null;                        // barvy z CSS promennych (nacteno jednou)
 function colors() {
@@ -96,7 +95,7 @@ let lastNow = 0;
 export function draw(canvas, opts) {
   const { ctx, W: fullW, H } = fitCanvas(canvas);
   const c = colors();
-  const { now, notes, range, widthFrac = 1, pps = 160, fallFrac = 1, kbFrac = 0.22, showLetters, naming, showFingers, loop, mine, pressed, waiting, handWin } = opts;
+  const { now, notes, range, widthFrac = 1, pps = 160, fallFrac = 1, kbFrac = 0.22, showLetters, naming, showFingers, loop, mine, pressed, waiting, targets } = opts;
   const W = Math.round(fullW * widthFrac);                   // sirka piana (zuzene piano je uprostred)
   const ox = Math.round((fullW - W) / 2);
   const layout = layoutKeys(range[0], range[1], W);
@@ -307,7 +306,7 @@ export function draw(canvas, opts) {
         ctx.lineWidth = 2;
         ctx.stroke();
       }
-      if (n && showFingers && n.f) {
+      if (n && showFingers && n.f && !targets) {
         ctx.fillStyle = k.black ? c.paper : c.ink;
         ctx.font = `700 ${Math.min(15, k.w * 0.55)}px "JetBrains Mono", ui-monospace, monospace`;
         ctx.fillText(String(n.f), k.x + k.w / 2, top + h * (k.black ? 0.72 : 0.5));
@@ -315,7 +314,7 @@ export function draw(canvas, opts) {
     }
   }
 
-  if (handWin) drawHandWindows(ctx, layout, handWin, hitY, c, t);
+  if (targets) drawFingerTargets(ctx, layout, targets, top, kh, c);
 
   // vyska padu: nad ni noty nejsou videt, prechod je jemne rozmazany
   if (fallTop > 8) {
@@ -333,55 +332,40 @@ export function draw(canvas, opts) {
   return { lookahead };
 }
 
-// Poloha rukou: lista pres 5 bilych klaves s cisly prstu (prava 1-5 zleva, leva 5-1 zleva).
-// Blizici se presun ruky je predem videt carkovane pod listou. Lista se k nove poloze plynule posune.
-const handAnim = { L: null, R: null };
-function drawHandWindows(ctx, layout, handWin, hitY, c, t) {
-  const wx = new Map();
-  for (const [p, k] of layout.keys) if (!k.black) wx.set(whiteIndex(p), k);
-  const span = (hand, thumb) => {
-    const idx = [0, 1, 2, 3, 4].map((i) => (hand === 'R' ? thumb + i : thumb - i));       // prst 1..5
-    const ks = idx.map((i) => wx.get(i));
-    const xs = ks.filter(Boolean);
-    if (!xs.length) return null;
-    return { x0: Math.min(...xs.map((k) => k.x)), x1: Math.max(...xs.map((k) => k.x + k.w)), ks };
-  };
+// Kam polozit prsty: cislo prstu primo na klavese, kterou ten prst zahraje (sytejsi = driv),
+// tenka cara mezi krajnimi prsty ukazuje rozpeti ruky, stitek L / P na vnejsim konci.
+function drawFingerTargets(ctx, layout, targets, top, kh, c) {
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
   for (const hand of ['L', 'R']) {
-    const hw = handWin[hand];
-    const cur = hw.cur !== null ? span(hand, hw.cur) : null;
-    if (!cur) { handAnim[hand] = null; continue; }
-    const a = handAnim[hand] || (handAnim[hand] = { x0: cur.x0, x1: cur.x1 });
-    a.x0 += (cur.x0 - a.x0) * 0.25;
-    a.x1 += (cur.x1 - a.x1) * 0.25;
-    const y = hitY + 9, h = 14;                                  // pod linii dopadu, at nezakryva noty
-    ctx.globalAlpha = 0.95;
+    const list = targets[hand].filter((x) => layout.keys.has(x.p));
+    if (!list.length) continue;
+    const pos = list.map((x) => {
+      const k = layout.keys.get(x.p);
+      return { ...x, cx: k.x + k.w / 2, cy: top + (k.black ? kh * 0.62 - 14 : kh * 0.62 + 4), r: Math.max(7, Math.min(10, k.w * 0.42)) };
+    });
+    // rozpeti ruky
+    const y = top + 5;
+    const x0 = Math.min(...pos.map((q) => q.cx)), x1 = Math.max(...pos.map((q) => q.cx));
     ctx.fillStyle = c[hand];
-    roundRect(ctx, a.x0 + 2, y, a.x1 - a.x0 - 4, h, 7);
-    ctx.fill();
+    ctx.globalAlpha = 0.7;
+    ctx.fillRect(x0, y - 1.5, Math.max(3, x1 - x0), 3);
+    for (const q of pos) ctx.fillRect(q.cx - 1, y - 1.5, 2, q.cy - y - q.r + 1);   // svisla vodítka k cislum
     ctx.globalAlpha = 1;
-    ctx.fillStyle = c.ink;
-    ctx.font = '700 9px "JetBrains Mono", ui-monospace, monospace';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const settled = Math.abs(cur.x0 - a.x0) < 1;
-    cur.ks.forEach((k, i) => { if (k && settled) ctx.fillText(String(i + 1), k.x + k.w / 2, y + h / 2 + 0.5); });
-    // stitek ruky na vnejsim konci listy
-    ctx.fillStyle = c[hand];
     ctx.font = '700 10px "JetBrains Mono", ui-monospace, monospace';
-    ctx.fillText(hand === 'L' ? 'L' : 'P', hand === 'L' ? a.x0 - 6 : a.x1 + 6, y + h / 2 + 0.5);
-    if (hw.next !== null) {
-      const nx = span(hand, hw.next);
-      if (nx) {
-        ctx.save();
-        ctx.globalAlpha = 0.55 + 0.35 * Math.sin(t * 8);
-        ctx.setLineDash([4, 3]);
-        ctx.strokeStyle = c[hand];
-        ctx.lineWidth = 1.5;
-        roundRect(ctx, nx.x0 + 2, y + h + 4, nx.x1 - nx.x0 - 4, 10, 5);
-        ctx.stroke();
-        ctx.restore();
-      }
+    ctx.fillText(hand === 'L' ? 'L' : 'P', hand === 'L' ? x0 - 9 : x1 + 9, y);
+    for (const q of pos) {
+      ctx.globalAlpha = q.dt === 0 ? 1 : Math.max(0.4, 0.95 - q.dt * 0.35);
+      ctx.beginPath();
+      ctx.arc(q.cx, q.cy, q.r, 0, Math.PI * 2);
+      ctx.fillStyle = c[hand];
+      ctx.fill();
+      if (q.dt === 0) { ctx.lineWidth = 2; ctx.strokeStyle = c.paper; ctx.stroke(); }
+      ctx.fillStyle = c.ink;
+      ctx.font = `700 ${Math.round(q.r * 1.2)}px "JetBrains Mono", ui-monospace, monospace`;
+      ctx.fillText(String(q.f), q.cx, q.cy + 0.5);
     }
+    ctx.globalAlpha = 1;
   }
 }
 

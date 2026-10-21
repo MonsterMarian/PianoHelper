@@ -60,13 +60,15 @@ hraje „ta druhá“ ruka.
 - Úroveň 2–3: levá ruka dostane bas pod melodií (strop = nejnižší tón melodie − malá tercie).
 - Úroveň 5: oktávové zdvojení melodie se přidá jen tehdy, když se ruka vejde do oktávy.
 
-## 5. Ukazatel polohy rukou
+## 5. Kam položit prsty
 
-Z prstokladu se pro každou ruku spočítá **pětiprstová poloha**: palec je na bílé klávese
-`bílá(nota) − (prst − 1)` u pravé ruky a `+ (prst − 1)` u levé (černá klávesa = bílá pod ní + ½).
-Na klaviatuře je lišta přes 5 bílých kláves s čísly prstů (pravá 1–5 zleva, levá 5–1). Když se
-do 1,2 s ruka přesouvá, nová poloha bliká čárkovaně pod lištou. Lišta se k nové poloze plynule
-posune. Přepínač „Ruce“ (R).
+Pro každou ruku se vezmou noty, které zní, a noty v příští 1,5 s. Každý prst dostane klávesu,
+kterou zahraje nejdřív, a **číslo prstu se ukáže přímo na té klávese** (výrazně = hraje teď,
+slaběji = brzy). Tenká čára mezi krajními prsty ukazuje rozpětí ruky.
+
+Dřívější verze kreslila pevnou „pětiprstovou polohu“: palec + 4 sousední klávesy. To bylo
+zavádějící, protože ruka často v poloze není. U oktáv (palec F3, malíček F4) ukazovala 1–5 na
+sousedních klávesách úplně jinde. Přepínač „Ruce“ (R).
 
 V UI se dá kterákoli ruka hrát samostatně („Hraju já“). Ta druhá zní a je ztlumená. Typický postup
 cvičení je pravá ruka zvlášť, levá zvlášť, pak obě.

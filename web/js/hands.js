@@ -69,49 +69,26 @@ export function rebalanceHands(notes) {
   return notes;
 }
 
-// ── Poloha rukou (pro ukazatel na klaviature) ───────────────────────────────
-// Bile klavesy cislujeme absolutne (C0 = 0, D0 = 1, ...); cerna klavesa = bila pod ni + 0.5.
-const WHITE_OF = [0, 0, 1, 1, 2, 3, 3, 4, 4, 5, 5, 6];
-export const whiteIndex = (p) => Math.floor(p / 12) * 7 + WHITE_OF[((p % 12) + 12) % 12];
-const isBlackPc = (p) => [1, 3, 6, 8, 10].includes(((p % 12) + 12) % 12);
-
-// Kde je palec, kdyz se nota hraje prstem f (prava: palec vlevo od prstu, leva: vpravo).
-export function thumbOf(n, hand) {
-  const x = whiteIndex(n.p) + (isBlackPc(n.p) ? 0.5 : 0);
-  return Math.floor(hand === 'L' ? x + (n.f - 1) : x - (n.f - 1));
-}
-
+// ── Kam polozit prsty (ukazatel na klaviature) ─────────────────────────────
 /**
- * Petiprstova poloha kazde ruky v case now: { L: { cur, next }, R: { cur, next } }.
- * cur/next = bila klavesa pod palcem (absolutni index) nebo null; next = poloha, na kterou
- * se ruka brzy presune (do 1.2 s), jinak null. Prava ruka pokryva palec..palec+4, leva palec-4..palec.
+ * Cile prstu kazde ruky v case now: { L: [{ f, p, dt }], R: [...] }.
+ * Pro kazdy prst klavesa, kterou zahraje nejdriv (znejici noty dt = 0, pak noty v pristich
+ * `ahead` sekundach). Nejde o pevnou petiprstovou polohu - u oktavy je 1 a 5 o oktavu od sebe.
  */
-export function handWindows(notes, now) {
-  const out = {};
+export function fingerTargets(notes, now, ahead = 1.5) {
+  const out = { L: [], R: [] };
   for (const hand of ['L', 'R']) {
-    const own = notes.filter((n) => (n.h === 'L' ? 'L' : 'R') === hand && n.f >= 1 && n.f <= 5);
-    const thumbAt = (group) => {
-      const ts = group.map((n) => thumbOf(n, hand)).sort((a, b) => a - b);
-      return ts[Math.floor(ts.length / 2)];
-    };
-    const active = own.filter((n) => n.s <= now && n.e > now);
-    let prev = null, next = null;
-    for (const n of own) {
-      if (n.s <= now) { if (!prev || n.s >= prev.s) prev = n; }
-      else if (!next || n.s < next.s) next = n;
+    const seen = new Map();                       // prst -> cil
+    const usedKeys = new Set();
+    const cand = notes
+      .filter((n) => (n.h === 'L' ? 'L' : 'R') === hand && n.f >= 1 && n.f <= 5 && n.e > now && n.s < now + ahead)
+      .sort((a, b) => a.s - b.s);
+    for (const n of cand) {
+      if (seen.has(n.f) || usedKeys.has(n.p)) continue;
+      seen.set(n.f, { f: n.f, p: n.p, dt: Math.max(0, n.s - now) });
+      usedKeys.add(n.p);
     }
-    const groupAt = (s) => own.filter((n) => Math.abs(n.s - s) < 0.035);
-    let cur = null;
-    if (active.length) cur = thumbAt(active);
-    else if (prev && now - prev.e < 0.6) cur = thumbAt(groupAt(prev.s));
-    else if (next && next.s - now < 2) cur = thumbAt(groupAt(next.s));
-    else if (prev) cur = thumbAt(groupAt(prev.s));
-    let upcoming = null;
-    if (next && next.s - now < 1.2) {
-      const t = thumbAt(groupAt(next.s));
-      if (t !== cur) upcoming = t;
-    }
-    out[hand] = { cur, next: upcoming };
+    out[hand] = [...seen.values()].sort((a, b) => a.p - b.p);
   }
   return out;
 }

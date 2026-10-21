@@ -34,6 +34,8 @@ python main.py --local video.mp4 --start-note E2      # nejlevější bílá kl�
 | **Čekej na mě** | přehrávač počká, až zahraješ správné tóny — MIDI klavír nebo klávesnice počítače (A W S E D F T G Y H U J K = C…C, Z/X oktáva) |
 | Nácvik po rukou | „Hraju já: Pravá / Levá“ — tu ruku hraješ sám, druhá zní a je ztlumená |
 | **Kolik piana je vidět** | Pohled → „Klaviatura“: 88 / 76 / 61 (výchozí, jako ve videích) / 49 kláves / podle skladby; v minimapě táhni výřez, za okraj měníš velikost. Noty mimo výřez ukazuje šipka na okraji |
+| **Kam dát prsty** | „Ruce“ (R): číslo prstu přímo na klávese, kterou zahraje (teď výrazně, za chvíli slaběji), čára = rozpětí ruky |
+| Přepínání skladeb | ‹ Knihovna › v hlavičce (K) |
 | Orientace | tečka na C4, popisky C3/C4/C5, velký název akordu na scéně |
 | **Notový zápis** s prstokladem | Nastavení → „Stáhnout notový zápis (MusicXML)“ → MuseScore |
 | Tempo 25–150 %, hlasitost | posuvníky; ←/→ = takt zpět/vpřed |
