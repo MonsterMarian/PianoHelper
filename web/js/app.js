@@ -1,12 +1,13 @@
 import { arrange, LEVELS } from './arrange.js';
 import { estimateGrid, chordTrack, detectKey } from './analysis.js';
 import { Player, PIANOS } from './audio.js';
-import { draw, drawOverview, drawBars, drawKeyMap, layoutKeys, keyRange, HANDLE, resetColors } from './render.js';
+import { draw, drawOverview, drawBars, drawKeyMap, drawBarGrid, layoutKeys, keyRange, HANDLE, resetColors } from './render.js';
 import { barTimes, barAt, loopBars, loopFromTimes, shiftLoop } from './loop.js';
 import { songEnd, noteName, isBlack, usesFlats } from './music.js';
 import { toMusicXML } from './musicxml.js';
 import { keyboardInput, midiInput } from './input.js';
 import { fingerTargets } from './hands.js';
+import { parseTitle, youtubeId } from './titles.js';
 
 const $ = (id) => document.getElementById(id);
 const player = new Player();
@@ -46,25 +47,43 @@ async function loadIndex(select) {
 
 function renderLibrary() {
   const list = $('song-list');
+  const q = $('song-filter').value.trim().toLowerCase();
   list.innerHTML = '';
-  if (!state.library.length) {
-    list.innerHTML = '<li class="empty-row">Zatím tu nic není.</li>';
+  const songs = state.library.filter((s) => !q || s.title.toLowerCase().includes(q));
+  if (!songs.length) {
+    list.innerHTML = `<li class="empty-row">${state.library.length ? 'Nic nenalezeno.' : 'Zatím tu nic není.'}</li>`;
     return;
   }
-  for (const s of state.library) {
+  for (const s of songs) {
+    const { name, series } = parseTitle(s.title);
+    const id = youtubeId(s.source);
     const li = document.createElement('li');
     const b = document.createElement('button');
     b.type = 'button';
-    b.setAttribute('aria-current', String(s.file === state.file));
-    b.innerHTML = '<span class="t"></span><span class="n"></span><span class="d"></span>';
-    b.querySelector('.t').textContent = s.title;
-    b.querySelector('.n').textContent = `${s.notes} not`;
-    b.querySelector('.d').textContent = fmt(s.duration);
+    b.className = 'song-card';
+    b.innerHTML = '<span class="thumb"><span class="dur"></span></span><span class="name"></span><span class="series"></span>';
+    const thumb = b.querySelector('.thumb');
+    if (id) {
+      const img = document.createElement('img');
+      img.src = `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;   // nahled z videa, ze ktereho jsou noty
+      img.alt = '';
+      img.loading = 'lazy';
+      img.onerror = () => img.remove();
+      thumb.prepend(img);
+    } else {
+      thumb.insertAdjacentHTML('afterbegin', `<span class="initial">${name.slice(0, 1)}</span>`);
+    }
+    if (s.file === state.file) thumb.insertAdjacentHTML('beforeend', '<span class="now">Hraje</span>');
+    b.querySelector('.dur').textContent = fmt(s.duration);
+    b.querySelector('.name').textContent = name;
+    b.querySelector('.series').textContent = series || `${s.notes} not`;
+    b.title = s.title;
     b.addEventListener('click', () => { $('library').close(); loadSongFile(s.file); });
     li.append(b);
     list.append(li);
   }
 }
+$('song-filter').addEventListener('input', renderLibrary);
 
 async function loadSongFile(file) {
   try {
@@ -86,11 +105,14 @@ function setSong(title, notes) {
   state.cache.clear();
   state.loop = null; state.loopOn = false;
   state.key = detectKey(state.base);
-  $('title').textContent = title;
+  const parsed = parseTitle(title);
+  $('title').textContent = parsed.name;
+  $('title').title = title;
+  $('title-series').textContent = parsed.series || 'Skladba';
   $('m-key').textContent = state.key.name;
   $('m-bpm').textContent = `${Math.round(60 / state.grid.beat)}`;
   $('m-meter').textContent = `${state.grid.meter}/4`;
-  document.title = `${title} — PianoHelper`;
+  document.title = `${parsed.name} — PianoHelper`;
   message('');
   applyLevel();
   player.seek(Math.max(0, state.base[0].s - 1));
@@ -388,46 +410,116 @@ function hitTest(x) {
   if (!l) return 'none';
   if (Math.abs(x - tlPx(l.a)) <= HANDLE) return 'a';
   if (Math.abs(x - tlPx(l.b)) <= HANDLE) return 'b';
-  if (x > tlPx(l.a) && x < tlPx(l.b)) return 'inside';
   return 'none';
 }
+// Na ose jedno gesto = jedna vec: klik / tazeni = posun v case, uchyty = okraje useku.
+// Vytvoreni a presun useku je ve velkem editoru (tlacitko "Vybrat usek" nebo dvojklik).
 tl.addEventListener('pointerdown', (ev) => {
   const x = tlX(ev);
-  drag = { x0: x, t0: tlTime(x), part: hitTest(x), moved: false, from: state.loop?.from, to: state.loop?.to };
+  drag = { part: hitTest(x), from: state.loop?.from, to: state.loop?.to };
   tl.setPointerCapture(ev.pointerId);
+  if (drag.part === 'none') scrubTo(tlTime(x));
 });
+function scrubTo(t) {
+  if (state.loopOn && state.loop && (t < state.loop.a - player.loop.pre || t >= state.loop.b)) { state.loopOn = false; updateLoopUi(); }
+  player.seek(t);
+}
 tl.addEventListener('pointermove', (ev) => {
   const x = tlX(ev);
   if (!drag) {
     const part = hitTest(x);
-    tl.style.cursor = part === 'a' || part === 'b' ? 'ew-resize' : part === 'inside' ? 'grab' : 'pointer';
+    tl.style.cursor = part === 'none' ? 'pointer' : 'ew-resize';
     return;
   }
-  if (!drag.moved && Math.abs(x - drag.x0) < 5) return;       // klik, ne tazeni
   manualPan();                                                  // behem tazeni osa neujizdi
-  drag.moved = true;
+  if (drag.part === 'none') { scrubTo(tlTime(x)); return; }
   const bar = barAt(state.bars, tlTime(x));
   if (drag.part === 'a') setLoop(Math.min(bar, drag.to - 1), drag.to);
-  else if (drag.part === 'b') setLoop(drag.from, Math.max(bar + 1, drag.from + 1));
-  else if (drag.part === 'inside') {
-    const shift = bar - barAt(state.bars, drag.t0);
-    const len = drag.to - drag.from;
-    const from = Math.max(0, Math.min(drag.from + shift, state.bars.length - 1 - len));
-    setLoop(from, from + len);
-  } else {
-    const l = loopFromTimes(state.bars, drag.t0, tlTime(x));
-    setLoop(l.from, l.to);
-  }
+  else setLoop(drag.from, Math.max(bar + 1, drag.from + 1));
 });
-tl.addEventListener('pointerup', (ev) => {
-  if (!drag) return;
-  const t = tlTime(tlX(ev));
-  if (drag.moved) jumpToLoop();
-  else {
-    if (state.loopOn && state.loop && (t < state.loop.a || t >= state.loop.b)) { state.loopOn = false; updateLoopUi(); }
-    player.seek(state.bars[barAt(state.bars, t)]);               // klik na takt = skok na jeho zacatek
-  }
+tl.addEventListener('pointerup', () => {
+  if (drag && drag.part !== 'none') jumpToLoop();
   drag = null;
+});
+tl.addEventListener('dblclick', () => openLoopEditor());
+
+// ── Editor useku: vsechny takty jako dlazdice, tazenim se vybere usek ─────────
+const le = { sel: null, anchor: 0, cols: 8, down: false };
+const LE_CELL = 70;
+function drawLoopEditor() {
+  drawBarGrid($('le-grid'), { notes: viewNotes(), bars: state.bars, cols: le.cols, cellH: LE_CELL, sel: le.sel,
+    cur: currentBar(), lo: state.songLo, hi: state.songHi });
+  $('le-info').textContent = le.sel
+    ? (le.sel.to - le.sel.from === 1 ? `Takt ${le.sel.from + 1}` : `Takty ${le.sel.from + 1}–${le.sel.to}`)
+      + ` · ${fmt(state.bars[le.sel.from])}–${fmt(state.bars[le.sel.to])}`
+    : 'Klikni na takt, nebo táhni přes víc taktů';
+  $('le-apply').disabled = !le.sel;
+}
+function openLoopEditor() {
+  if (!state.base.length) return;
+  le.sel = state.loop ? { from: state.loop.from, to: state.loop.to } : null;
+  $('loop-editor').showModal();
+  requestAnimationFrame(() => {
+    le.cols = Math.max(4, Math.floor($('le-grid').clientWidth / 112));
+    drawLoopEditor();
+    const row = Math.floor((le.sel ? le.sel.from : currentBar()) / le.cols);
+    $('le-grid').parentElement.scrollTop = Math.max(0, (row - 1) * LE_CELL);
+  });
+}
+const leBar = (ev) => {
+  const r = $('le-grid').getBoundingClientRect();
+  const col = Math.min(le.cols - 1, Math.max(0, Math.floor(((ev.clientX - r.left) / r.width) * le.cols)));
+  const row = Math.max(0, Math.floor((ev.clientY - r.top) / LE_CELL));
+  return Math.min(state.bars.length - 2, row * le.cols + col);
+};
+$('le-grid').addEventListener('pointerdown', (ev) => {
+  const i = leBar(ev);
+  if (ev.shiftKey && le.sel) le.sel = { from: Math.min(le.anchor, i), to: Math.max(le.anchor, i) + 1 };
+  else { le.anchor = i; le.sel = { from: i, to: i + 1 }; }
+  le.down = true;
+  $('le-grid').setPointerCapture(ev.pointerId);
+  drawLoopEditor();
+});
+$('le-grid').addEventListener('pointermove', (ev) => {
+  if (!le.down) return;
+  const i = leBar(ev);
+  le.sel = { from: Math.min(le.anchor, i), to: Math.max(le.anchor, i) + 1 };
+  drawLoopEditor();
+});
+$('le-grid').addEventListener('pointerup', () => { le.down = false; });
+$('le-apply').addEventListener('click', () => {
+  if (!le.sel) return;
+  setLoop(le.sel.from, le.sel.to);
+  jumpToLoop();
+  $('loop-editor').close();
+});
+$('le-clear').addEventListener('click', () => { state.loopOn = false; updateLoopUi(); $('loop-editor').close(); });
+$('loop-edit').addEventListener('click', openLoopEditor);
+
+// ── Rozsah, ktery hudba potrebuje, vs. zobrazena klaviatura ──────────────────
+let lastWarn = '';
+function visibleRange() {
+  let lo = state.lo, hi = state.hi;
+  while (isBlack(lo)) lo--;
+  while (isBlack(hi)) hi++;
+  return [lo, hi];
+}
+function updateRangeWarning(shown) {
+  const [lo, hi] = visibleRange();
+  const out = shown.filter((n) => n.p < lo || n.p > hi);
+  const text = out.length
+    ? `⚠ ${out.length} not mimo klaviaturu (${noteName(Math.min(...out.map((n) => n.p)), 'intl', true)}–${noteName(Math.max(...out.map((n) => n.p)), 'intl', true)})`
+    : '';
+  if (text === lastWarn) return;
+  lastWarn = text;
+  $('range-warn').hidden = !text;
+  $('range-warn-text').textContent = text;
+}
+$('range-fit').addEventListener('click', () => {
+  state.custom = snap(state.songLo - 1, state.songHi + 1);
+  state.range = 'custom';
+  prefs.range = state.range; prefs.custom = state.custom; savePrefs();
+  updateRange();
 });
 tl.addEventListener('pointercancel', () => { drag = null; });
 
@@ -617,6 +709,12 @@ document.addEventListener('keydown', (e) => {
 
 // ── Smycka vykreslovani ─────────────────────────────────────────────────────
 let lastChord = '';
+// tony, ktere hudba potrebuje ted (od teto chvile do konce viditelneho padu + 3 s)
+function needRange(shown, now) {
+  const win = shown.filter((n) => n.e > now - 0.2 && n.s < now + (state.lookahead || 3) + 3);
+  return win.length ? { lo: Math.min(...win.map((n) => n.p)), hi: Math.max(...win.map((n) => n.p)) } : null;
+}
+
 function frame() {
   const now = player.now();
   const canvas = $('stage');
@@ -630,10 +728,12 @@ function frame() {
       showFingers: $('fingers').checked, loop: state.loopOn ? state.loop : null,
       mine: { L: $('mine-l').checked, R: $('mine-r').checked }, pressed: state.pressed, waiting,
       targets: $('hand-pos').checked ? fingerTargets(shown, now, ahead()) : null,
+      need: needRange(shown, now),
     }).lookahead;
     clampView();
     if (!drag && !ovDrag && performance.now() > tlView.manualUntil) showInTimeline(now);
     const t1 = tlView.t0 + tlView.span;
+    updateRangeWarning(shown);
     drawBars(tl, { notes: shown, bars: state.bars, meter: state.grid.meter, t0: tlView.t0, t1, now, loop: state.loop, loopOn: state.loopOn, lo: state.songLo, hi: state.songHi });
     drawOverview(ov, { notes: shown, duration: state.duration, now, loop: state.loop, loopOn: state.loopOn, t0: tlView.t0, t1, lo: state.songLo, hi: state.songHi });
     drawKeyMap(km, { lo: state.lo, hi: state.hi, songLo: state.songLo, songHi: state.songHi });

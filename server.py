@@ -38,7 +38,8 @@ def song_index():
                 song = json.load(f)
             notes = song.get('notes', [])
             out.append({'file': name, 'title': song.get('title', name), 'notes': len(notes),
-                        'duration': round(max((n['e'] for n in notes), default=0), 1)})
+                        'duration': round(max((n['e'] for n in notes), default=0), 1),
+                        'source': song.get('source', '')})
         except (OSError, ValueError, KeyError, TypeError):
             continue          # poskozeny soubor v knihovne nesmi shodit seznam
     return sorted(out, key=lambda s: s['title'].lower())

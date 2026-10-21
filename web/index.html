@@ -18,7 +18,7 @@
     <header class="top">
       <a class="mark" href="./" aria-label="PianoHelper">Piano<em>Helper</em></a>
       <button id="library-open" class="title-btn" aria-haspopup="dialog" title="Knihovna (K)">
-        <span class="eyebrow">Skladba <span aria-hidden="true">↓</span></span>
+        <span id="title-series" class="eyebrow">Skladba</span>
         <span id="title" class="title">Vyber skladbu</span>
       </button>
       <div class="song-nav" role="group" aria-label="Skladby">
@@ -86,6 +86,10 @@
         <span class="eyebrow">Zahraj</span>
         <span id="wait-notes" class="wait-notes"></span>
       </div>
+      <div id="range-warn" class="range-warn" hidden role="status">
+        <span id="range-warn-text"></span>
+        <button id="range-fit" class="key-btn" type="button">Zobrazit celé</button>
+      </div>
       <div id="message" class="empty" hidden>
         <p class="eyebrow">PianoHelper</p>
         <h2>Zahraj, co&nbsp;slyšíš.</h2>
@@ -101,6 +105,7 @@
             <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 12a7 7 0 0 1 12-5l2 2M20 12a7 7 0 0 1-12 5l-2-2M18 4v5h-5M6 20v-5h5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
             Opakovat
           </button>
+          <button id="loop-edit" class="key-btn" title="Vybrat úsek po taktech ve větším okně (dvojklik na osu)">Vybrat úsek…</button>
           <button id="loop-prev" class="key-btn square" aria-label="Předchozí úsek ([)" title="Předchozí úsek ( [ )">‹</button>
           <output id="loop-info" class="loop-readout">Takty —</output>
           <button id="loop-next" class="key-btn square" aria-label="Další úsek (])" title="Další úsek ( ] )">›</button>
@@ -177,9 +182,10 @@
   <dialog id="library" class="sheet" aria-labelledby="library-h">
     <div class="sheet-head">
       <h2 id="library-h">Knihovna</h2>
+      <input id="song-filter" class="search" type="search" placeholder="Hledat skladbu…" aria-label="Hledat skladbu">
       <button class="icon-btn" data-close aria-label="Zavřít">✕</button>
     </div>
-    <ol id="song-list" class="song-list"></ol>
+    <ul id="song-list" class="song-grid"></ul>
     <div class="sheet-foot">
       <form id="convert" class="convert" hidden>
         <span class="label">Převést video z YouTube</span>
@@ -194,6 +200,20 @@
         Otevřít .mid / .json
         <input id="file" type="file" accept=".mid,.midi,.json" hidden>
       </label>
+    </div>
+  </dialog>
+
+  <dialog id="loop-editor" class="sheet" aria-labelledby="loop-editor-h">
+    <div class="sheet-head">
+      <h2 id="loop-editor-h">Úsek</h2>
+      <span id="le-info" class="le-info">Klikni na takt, nebo táhni přes víc taktů</span>
+      <button class="icon-btn" data-close aria-label="Zavřít">✕</button>
+    </div>
+    <div class="le-scroll"><canvas id="le-grid" aria-label="Takty skladby: tažením vyber úsek"></canvas></div>
+    <div class="sheet-foot le-foot">
+      <button id="le-apply" class="key-btn accent" type="button">Opakovat tento úsek</button>
+      <button id="le-clear" class="key-btn" type="button">Zrušit opakování</button>
+      <span class="hint">Shift + klik rozšíří výběr. Noty pravé ruky žlutě, levé tyrkysově.</span>
     </div>
   </dialog>
 

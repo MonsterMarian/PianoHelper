@@ -68,7 +68,7 @@ palec pod/přes prst.
 - Palec a malíček patří na bílé klávesy, dlouhé prsty 2–3–4 na černé
   ([Yamaha](https://hub.yamaha.com/keyboards/k-how-to/the-basics-of-piano-keyboard-fingering/),
   [pianoscales.org](https://www.pianoscales.org/fingerings.html)). V modelu palec na černé v melodii
-  4 body, malíček na černé 1 bod.
+  5 bodů, malíček na černé 1 bod.
 - **Výjimka: akordy a oktávy.** Tam je palec na černé běžný (kvintakord B♭ dur), proto jen 1 bod.
 - **Malíček na začátek, konec nebo obrat** pasáže
   ([R. Kelley](https://robertkelleyphd.com/home/arpfing.htm)). Krajní tón tam s malíčkem nic nestojí.
@@ -110,6 +110,26 @@ upravené. Každá změna má test v `tests/theory.test.mjs`:
   nebo 1 bod (dvojzvuk), takže se použije jen tehdy, když ho vynutí okolí.
 - **Pauza dává ruce čas.** Když mezi notami je pauza, cena přechodu se násobí
   `max(0,15; 1 − pauza / 0,8 s)`. Po pauze se ruka smí volně přesunout.
+
+- **Skok větší než kvinta = přesun ruky.** Ruka se při skoku přenese celá, takže se nepočítá
+  natažení prstů, ale jen přesun: cena `min(Parncutt; 3 + 0,15·vzdálenost)`.
+- **Rozklady akordů (úroveň 4)** mají v levé ruce měkkou nápovědu 5-2-1-2 (jiný prstoklad stojí
+  málo, ne zákaz).
+
+## Audit na reálných skladbách
+
+`audit2.mjs` projde 18 skladeb × 5 úrovní (51 647 událostí) a počítá chyby, které by učitel
+opravil. Před a po úpravách výše:
+
+| chyba | před | po |
+|---|---|---|
+| palec na černé v krokové melodii | 311 | 260 |
+| stejný prst legato na jiné klávese | 200 | 97 |
+| křížení prstů bez palce | 43 | 0 |
+| rozpětí přes mez ruky | 53 | 3 |
+
+Zbylé „palce na černé“ jsou hlavně v rychlých pasážích s mnoha černými (B♭ moll apod.), kde to
+učebnice také připouští; zbylé „stejné prsty“ jsou přechody mezi rozklady.
 
 ## Algoritmus
 

@@ -333,3 +333,13 @@ test('nazvy not podle toniny: becka v b-tonina ch, krizky jinde', async () => {
   assert.equal(noteName(70, 'cz', false, usesFlats({ tonic: 5, mode: 'dur' })), 'B');        // F dur, cesky B
   assert.equal(noteName(66, 'intl', false, usesFlats({ tonic: 4, mode: 'moll' })), 'F♯');   // e moll
 });
+
+test('nazvy skladeb z YouTube: bez "EASY Piano Tutorial", nazev + serie', async () => {
+  const { parseTitle, youtubeId } = await import('../web/js/titles.js');
+  assert.deepEqual(parseTitle('[full] Jujutsu Kaisen OP - "Kaikai Kitan" - EASY Piano Tutorial & Sheet Music'), { name: 'Kaikai Kitan', series: 'Jujutsu Kaisen OP' });
+  assert.deepEqual(parseTitle('Stromae, Pomme - Ma Meilleure Ennemie (from Arcane Season 2) | EASY Piano Tutorial'), { name: 'Ma Meilleure Ennemie', series: 'Stromae, Pomme · Arcane Season 2' });
+  assert.deepEqual(parseTitle('Sufjan Stevens - Fourth Of July EASY PIANO TUTORIAL'), { name: 'Fourth Of July', series: 'Sufjan Stevens' });
+  assert.deepEqual(parseTitle('Óda na radost (Beethoven)'), { name: 'Óda na radost', series: 'Beethoven' });
+  assert.equal(parseTitle('Jujutsu Kaisen ED 2 - "give it back" by Cö shu Nie - EASY Piano Tutorial & Sheet Music').name, 'give it back');
+  assert.equal(youtubeId('https://www.youtube.com/watch?v=_x16Gr3uJf8&list=x'), '_x16Gr3uJf8');
+});

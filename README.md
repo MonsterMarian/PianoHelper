@@ -26,7 +26,7 @@ python main.py --local video.mp4 --start-note E2      # nejlevější bílá kl�
 |---|---|
 | Padající noty s **písmenem** na notě | „Písmena“; názvy C D E F G A B, česky (H) nebo Do Re Mi (nastavení) |
 | **5 obtížností** | 1 Začátečník (hlavní tóny melodie, ≥ 0,6 s od sebe) · 2 Snadné (melodie + bas) · **3 Originál** · 4 Pokročilé (rozložené akordy + harmonie) · 5 Mistr (+ oktávy). Klávesy 1–5 |
-| **Úsek** na opakování — po taktech | „Opakovat“ (L) = úsek od aktuálního taktu; ‹ › nebo `[` `]` = předchozí/další úsek; délka 1/2/4/8 taktů. Na časové ose: tažení = nový úsek, úchyty = okraje, tažení uvnitř = posun, klik mimo = konec opakování. Každé opakování začne o dobu dřív (předehra) |
+| **Úsek** na opakování — po taktech | „Opakovat“ (L) = úsek od aktuálního taktu; ‹ › nebo `[` `]` = předchozí/další úsek; délka 1/2/4/8 taktů. Na časové ose: klik / tažení = jen posun v čase, úchyty = okraje úseku, klik mimo úsek = konec opakování. **„Vybrat úsek…“** (nebo dvojklik na osu) otevře velké okno se všemi takty — tažením nebo Shift+klikem vybereš takty. Každé opakování začne o dobu dřív (předehra) |
 | **Časová osa** | nahoře přehled celé skladby (táhni okno), pod ním přiblížené takty, které jedou s hudbou (🔒). Kolečko = přiblížit/oddálit, Shift+kolečko = posun (odemkne), přehrání nebo ‹ › osu zase zamkne |
 | **Pohled** (V) | kolik piana je vidět (klaviatura + minimapa), šířka piana, délka not (jen vzhled — kratší noty padají pomaleji, tempo hudby se nemění), výška pádu, výška klaviatury |
 | **Režim jeviště** (F) | celá obrazovka jen pro noty, malý ovladač nahoře, Esc = konec |
@@ -38,7 +38,8 @@ python main.py --local video.mp4 --start-note E2      # nejlevější bílá kl�
 | **Jen jedna ruka** | „Zobrazit: Obě / P / L“ — skryje noty, prsty i osu druhé ruky (zvuk se nemění) |
 | **Zvuk piana** | Nastavení: 6 zvuků (koncertní křídlo Salamander = výchozí, Musyng Kite, FatBoy, jasné piano, Rhodes, honky-tonk), uložené v `web/samples` — funguje i offline |
 | Barvy not, názvy | Nastavení: barva pravé a levé ruky, názvy not zap/vyp, české/mezinárodní/Do-Re-Mi; ♯ / ♭ podle tóniny |
-| Přepínání skladeb | ‹ Knihovna › v hlavičce (K) |
+| Přepínání skladeb | ‹ Knihovna › v hlavičce (K); knihovna má náhledy z YouTube, název + série (anime/film) a hledání |
+| **Rozsah skladby** | pod notami pruh, které klávesy skladba potřebuje; když je část mimo zobrazenou klaviaturu, objeví se „⚠ N not mimo klaviaturu“ a tlačítko „Zobrazit celé“ |
 | Orientace | tečka na C4, popisky C3/C4/C5, velký název akordu na scéně |
 | **Notový zápis** s prstokladem | Nastavení → „Stáhnout notový zápis (MusicXML)“ → MuseScore |
 | Tempo 25–150 %, hlasitost | posuvníky; ←/→ = takt zpět/vpřed |

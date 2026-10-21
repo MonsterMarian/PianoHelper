@@ -96,7 +96,7 @@ let lastNow = 0;
 export function draw(canvas, opts) {
   const { ctx, W: fullW, H } = fitCanvas(canvas);
   const c = colors();
-  const { now, notes, range, widthFrac = 1, pps = 160, fallFrac = 1, kbFrac = 0.22, showLetters, naming, showFingers, loop, mine, pressed, waiting, targets, flats } = opts;
+  const { now, notes, range, widthFrac = 1, pps = 160, fallFrac = 1, kbFrac = 0.22, showLetters, naming, showFingers, loop, mine, pressed, waiting, targets, flats, need } = opts;
   const W = Math.round(fullW * widthFrac);                   // sirka piana (zuzene piano je uprostred)
   const ox = Math.round((fullW - W) / 2);
   const layout = layoutKeys(range[0], range[1], W);
@@ -255,6 +255,30 @@ export function draw(canvas, opts) {
   ctx.fillRect(0, hitY, W, 6);
   ctx.fillStyle = c.accent;
   ctx.fillRect(0, hitY, W, 1.5);
+
+  // lista rozsahu, ktery hudba prave potrebuje (v plstene pasce); mimo klaviaturu cervene sipky
+  if (need) {
+    const keyX = (p) => { const k = layout.keys.get(p); return k ? k.x + k.w / 2 : null; };
+    const outLo = need.lo < layout.lo, outHi = need.hi > layout.hi;
+    const x0 = outLo ? 0 : keyX(need.lo), x1 = outHi ? W : keyX(need.hi);
+    if (x0 !== null && x1 !== null) {
+      ctx.fillStyle = 'rgba(239,233,220,0.55)';
+      ctx.fillRect(x0, hitY + 2.5, Math.max(3, x1 - x0), 2);
+      ctx.fillStyle = c.wrong;
+      const blink = 0.6 + 0.4 * Math.sin(t * 6);
+      ctx.globalAlpha = blink;
+      for (const [on, ax, dir] of [[outLo, 2, -1], [outHi, W - 2, 1]]) {
+        if (!on) continue;
+        ctx.beginPath();
+        ctx.moveTo(ax + dir * 0, hitY - 14);
+        ctx.lineTo(ax - dir * 12, hitY - 22);
+        ctx.lineTo(ax - dir * 12, hitY - 6);
+        ctx.fill();
+        ctx.fillRect(dir < 0 ? 0 : W - 40, hitY + 2, 40, 3);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
 
   // klaviatura
   const top = hitY + 6, kh = kbH - 6;
@@ -498,4 +522,37 @@ export function drawBars(canvas, { notes, bars, meter, t0, t1, now, loop, loopOn
   }
   ctx.fillStyle = c.paper;
   ctx.fillRect(x(now) - 0.75, 0, 1.5, H);
+}
+
+// Editor useku: vsechny takty jako dlazdice v radcich (cislo + nahled not), vyber, aktualni takt.
+export function drawBarGrid(canvas, { notes, bars, cols, cellH, sel, cur, lo, hi }) {
+  const n = bars.length - 1;
+  const rows = Math.ceil(n / cols);
+  canvas.style.height = `${rows * cellH}px`;
+  const { ctx, W } = fitCanvas(canvas);
+  const c = colors();
+  const cw = W / cols;
+  ctx.clearRect(0, 0, W, rows * cellH);
+  const range = Math.max(1, hi - lo);
+  for (let i = 0; i < n; i++) {
+    const x = (i % cols) * cw, y = Math.floor(i / cols) * cellH;
+    const inSel = sel && i >= sel.from && i < sel.to;
+    ctx.fillStyle = inSel ? 'rgba(255,79,31,0.22)' : i === cur ? 'rgba(239,233,220,0.12)' : 'rgba(239,233,220,0.04)';
+    roundRect(ctx, x + 2, y + 2, cw - 4, cellH - 4, 6);
+    ctx.fill();
+    if (inSel) { ctx.strokeStyle = c.accent; ctx.lineWidth = 1.5; ctx.stroke(); }
+    ctx.fillStyle = inSel ? c.accent : i === cur ? c.paper : c.muted;
+    ctx.font = '500 11px "JetBrains Mono", ui-monospace, monospace';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    ctx.fillText(String(i + 1), x + 8, y + 7);
+    const a = bars[i], b = bars[i + 1], top = y + 24, h = cellH - 32;
+    for (const nt of notes) {
+      if (nt.e <= a || nt.s >= b) continue;
+      ctx.fillStyle = nt.h === 'L' ? c.L : c.R;
+      const x0 = x + 6 + Math.max(0, (nt.s - a) / (b - a)) * (cw - 12);
+      const x1 = x + 6 + Math.min(1, (nt.e - a) / (b - a)) * (cw - 12);
+      ctx.fillRect(x0, top + h - ((nt.p - lo) / range) * h, Math.max(1.5, x1 - x0 - 1), 2);
+    }
+  }
 }

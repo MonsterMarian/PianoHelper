@@ -40,6 +40,16 @@ function spanCost(lo, hi, span, { relaxed = true } = {}) {
 // Cena prechodu jedne noty na druhou (a -> b), q = zrcadlena vyska, p = puvodni.
 // gap = pauza mezi tony (<= 0.06 s = legato), shape = akord -> akord (posouva se cely tvar ruky).
 export function stepCost(fa, qa, pa, fb, qb, pb, gap = 0, shape = false) {
+  const base = stepCostInner(fa, qa, pa, fb, qb, pb, gap, shape);
+  // Skok vetsi nez kvinta neni "nataheni prstu", ale presun ruky (legato zajisti pedal):
+  // pevna cena za skok misto penalizace rozpeti - jinak model rve palec na cerne, aby skok obejmul.
+  const d = Math.abs(qb - qa);
+  if (d <= 7) return base;
+  const black = (fb === 1 && isBlack(pb) ? 2 : 0) + (fb === 5 && isBlack(pb) ? 1 : 0);
+  return Math.min(base, 3 + 0.15 * d + black);
+}
+
+function stepCostInner(fa, qa, pa, fb, qb, pb, gap, shape) {
   if (fa === fb) {
     if (qa === qb) return 0;
     const d = Math.abs(qb - qa);
@@ -74,7 +84,7 @@ export function stepCost(fa, qa, pa, fb, qb, pb, gap = 0, shape = false) {
 export function noteCost(f, p, inChord = false) {
   let c = 0;
   if (f === 4 || f === 5) c += 0.5;          // pravidlo 6: slabe prsty (Parncutt: 1; 0.5 = radsi poloha nez prekladani)
-  if (f === 1 && isBlack(p)) c += inChord ? 1 : 4;                        // pravidlo 10: palec na cerne
+  if (f === 1 && isBlack(p)) c += inChord ? 1 : 5;                        // pravidlo 10: palec na cerne
   if (f === 5 && isBlack(p) && !inChord) c += 1;                          // malicek na cerne
   return c;
 }
@@ -147,7 +157,10 @@ export function fingerHand(notes, hand) {
       ns = ns.slice(0, 5);
     }
     const qs = ns.map((n) => mirror * n.p), ps = ns.map((n) => n.p);
-    const opts = chordFingerings(ns.length).map((fs) => ({ fs, cost: verticalCost(fs, qs, ps) }));
+    // doporuceny prst (napr. ucebnicovy rozklad 5-2-1-2 z aranzma): odchylka stoji 1.5
+    const opts = chordFingerings(ns.length).map((fs) => ({
+      fs, cost: verticalCost(fs, qs, ps) + ns.reduce((c, n, i) => c + (n.fixF && fs[i] !== n.fixF ? 1.5 : 0), 0),
+    }));
     return { t: g.t, end: Math.max(...ns.map((n) => n.e)), ns, qs, ps, opts };
   });
 

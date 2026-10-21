@@ -151,12 +151,13 @@ function advanced(notes, grid, end, { octaves }) {
     const fifth = placeInRange((ch.root + 7) % 12, n.p + 1, n.p + 11, n.p + 7);
     const pattern = [n.p, fifth, n.p + 12, fifth].map((p) => (p !== null && p < top - 2 ? p : null));
     const times = eighthsIn(beats, n.s, n.e);
+    const FINGERS = [5, 2, 1, 2];                                  // ucebnicovy rozklad leve ruky
     times.forEach((t, k) => {
       const p = pattern[k % 4];
       const next = times[k + 1] ?? n.e;
       if (p === null) return;
       if (k > 0 && others.some((o) => o.p === p && o.s < next && o.e > t)) return;
-      result.push({ p, s: t, e: t + (next - t) * 0.95, h: 'L', added: k > 0 });
+      result.push({ p, s: t, e: t + (next - t) * 0.95, h: 'L', added: k > 0, fixF: FINGERS[k % 4] });
     });
   }
 
