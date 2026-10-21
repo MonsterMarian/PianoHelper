@@ -39,8 +39,9 @@ function spanCost(lo, hi, span, { relaxed = true } = {}) {
 
 // Cena prechodu jedne noty na druhou (a -> b), q = zrcadlena vyska, p = puvodni.
 // gap = pauza mezi tony (<= 0.06 s = legato), shape = akord -> akord (posouva se cely tvar ruky).
-export function stepCost(fa, qa, pa, fb, qb, pb, gap = 0, shape = false) {
-  const base = stepCostInner(fa, qa, pa, fb, qb, pb, gap, shape);
+// still = ruka stoji v jedne poloze (pasaz se vejde do peti prstu).
+export function stepCost(fa, qa, pa, fb, qb, pb, gap = 0, shape = false, still = false) {
+  const base = stepCostInner(fa, qa, pa, fb, qb, pb, gap, shape, still);
   // Skok vetsi nez kvinta neni "nataheni prstu", ale presun ruky (legato zajisti pedal):
   // pevna cena za skok misto penalizace rozpeti - jinak model rve palec na cerne, aby skok obejmul.
   const d = Math.abs(qb - qa);
@@ -49,7 +50,7 @@ export function stepCost(fa, qa, pa, fb, qb, pb, gap = 0, shape = false) {
   return Math.min(base, 3 + 0.15 * d + black);
 }
 
-function stepCostInner(fa, qa, pa, fb, qb, pb, gap, shape) {
+function stepCostInner(fa, qa, pa, fb, qb, pb, gap, shape, still) {
   if (fa === fb) {
     if (qa === qb) return 0;
     const d = Math.abs(qb - qa);
@@ -65,10 +66,14 @@ function stepCostInner(fa, qa, pa, fb, qb, pb, gap, shape) {
   if (fa === 3 && fb === 4) c += 0.5;                                     // pravidlo 8: 3 -> 4 (Parncutt: 1)
   if (((fa === 3 && fb === 4) || (fa === 4 && fb === 3)) &&
       ((fa === 3 && !bA && bB) || (fb === 3 && !bB && bA))) c += 1;       // pravidlo 9: 4 na cerne vedle 3 na bile
-  if (fb === 1 && bB && !bA) c += 2;                                      // pravidlo 10: palec na cernou z bile
-  if (fa === 1 && bA && !bB) c += 2;                                      //              a z cerne na bilou
-  if (fb === 5 && bB && !bA) c += 2;                                      // pravidlo 11: malicek na cerne
-  if (fa === 5 && bA && !bB) c += 2;
+  // Pravidla 10 a 11 (Parncutt) jsou stavena na stupnice a behy. Kdyz ruka stoji v poloze, palec
+  // i malicek na cerne nevadi (klaviristka v Levels: C#6 palcem, E6 + G#6 dvojkou a ctyrkou).
+  const nb = still ? 0.5 : 2;
+  if (fb === 1 && bB && !bA) c += nb;                                     // pravidlo 10: palec na cernou z bile
+  if (fa === 1 && bA && !bB) c += nb;                                     //              a z cerne na bilou
+  if (fb === 5 && bB && !bA) c += nb;                                     // pravidlo 11: malicek na cerne
+  if (fa === 5 && bA && !bB) c += nb;
+  if (still && lo === 1 && span < 0) c += 3;                              // podklad v poloze, kam se ruka vejde
   if (lo === 1 && span < 0) {                                             // pravidlo 12: podklad/prekladani palce
     const thumbBlack = fa === 1 ? bA : bB, otherBlack = fa === 1 ? bB : bA;
     c += 0.5;                                                             // kazdy podklad je namaha -> co nejmene
@@ -81,10 +86,10 @@ function stepCostInner(fa, qa, pa, fb, qb, pb, gap, shape) {
 // Cena jedne noty (nezavisla na sousedech).
 // Palec a malicek patri na bile klavesy, 2-3-4 na cerne (Yamaha, pianoscales.org). Vyjimka:
 // v akordech a oktavach je palec na cerne bezny (B dur kvintakord), proto tam jen mirne.
-export function noteCost(f, p, inChord = false) {
+export function noteCost(f, p, inChord = false, still = false) {
   let c = 0;
   if (f === 4 || f === 5) c += 0.5;          // pravidlo 6: slabe prsty (Parncutt: 1; 0.5 = radsi poloha nez prekladani)
-  if (f === 1 && isBlack(p)) c += inChord ? 1 : 5;                        // pravidlo 10: palec na cerne
+  if (f === 1 && isBlack(p)) c += inChord || still ? 3 : 5;               // pravidlo 10: palec na cerne
   if (f === 5 && isBlack(p) && !inChord) c += 1;                          // malicek na cerne
   return c;
 }
@@ -93,6 +98,10 @@ export function noteCost(f, p, inChord = false) {
 export function tripleCost(f1, q1, f2, q2, f3, q3) {
   let c = 0;
   if (new Set([f1, f2, f3]).size === 3 && [f1, f2, f3].every((f) => f >= 3)) c += 0.5; // pravidlo 7: 3-4-5
+  // Podklad / preklad, po kterem se melodie hned vrati a vse se vejde do polohy, je zbytecny:
+  // ve stupnici ruka pokracuje dal, tady by se jen vratila (Levels: E5 C#5 E5 = 3 2 3, ne 1 2 4).
+  const crossing = f1 !== f2 && Math.min(f1, f2) === 1 && (f1 < f2 ? q2 - q1 : q1 - q2) < 0;
+  if (crossing && (q2 - q1) * (q3 - q2) < 0 && Math.max(q1, q2, q3) - Math.min(q1, q2, q3) <= 7) c += 2;
   if (f1 === f3) return q1 === q3 ? c : c + 1 + Math.abs(q3 - q1);       // stejny prst jinde = ruka se posunula
   const lo = Math.min(f1, f3), hi = Math.max(f1, f3);
   const span = f1 < f3 ? q3 - q1 : q1 - q3;
@@ -131,13 +140,13 @@ function textbook(qs) {
   return null;
 }
 
-function verticalCost(fs, qs, ps) {
+function verticalCost(fs, qs, ps, still) {
   let c = 0;
   const tb = textbook(qs);
   if (tb && tb.some((f, i) => f !== fs[i])) c += fs.length === 3 ? 2 : 1;   // jiny nez ucebnicovy tvar
   for (let i = 0; i < fs.length; i++) {
     // malicek na krajni note akordu je prirozeny (C-E-G = 1-3-5), slaby prst se pocita jen u 4
-    c += noteCost(fs[i], ps[i], fs.length > 1) - (fs.length > 1 && fs[i] === 5 ? 0.5 : 0);
+    c += noteCost(fs[i], ps[i], fs.length > 1, still) - (fs.length > 1 && fs[i] === 5 ? 0.5 : 0);
     for (let j = i + 1; j < fs.length; j++) c += spanCost(fs[i], fs[j], qs[j] - qs[i], { relaxed: j === i + 1 });
   }
   return c;
@@ -156,12 +165,19 @@ export function fingerHand(notes, hand) {
       ns.slice(5).forEach((n) => { n.f = 0; });
       ns = ns.slice(0, 5);
     }
-    const qs = ns.map((n) => mirror * n.p), ps = ns.map((n) => n.p);
+    return { t: g.t, end: Math.max(...ns.map((n) => n.e)), ns, qs: ns.map((n) => mirror * n.p), ps: ns.map((n) => n.p) };
+  });
+  // Ruka stoji v poloze, kdyz se okoli (+-3 udalosti do 1,5 s) vejde do peti prstu (<= 7 pultonu).
+  // Klavirista pak nepodklada a palec da klidne na cernou (Levels: G#5 F#5 E5 C#5 = 5 4 3 2).
+  events.forEach((ev, i) => {
+    const near = events.slice(Math.max(0, i - 3), i + 4).filter((o) => Math.abs(o.t - ev.t) < 1.5);
+    const qs = near.flatMap((o) => o.qs);
+    // aspon 6 udalosti: zacatek stupnice (C D E F) se taky vejde do peti prstu, ale pokracuje dal
+    ev.still = near.length >= 6 && Math.max(...qs) - Math.min(...qs) <= 7;
     // doporuceny prst (napr. ucebnicovy rozklad 5-2-1-2 z aranzma): odchylka stoji 1.5
-    const opts = chordFingerings(ns.length).map((fs) => ({
-      fs, cost: verticalCost(fs, qs, ps) + ns.reduce((c, n, i) => c + (n.fixF && fs[i] !== n.fixF ? 1.5 : 0), 0),
+    ev.opts = chordFingerings(ev.ns.length).map((fs) => ({
+      fs, cost: verticalCost(fs, ev.qs, ev.ps, ev.still) + ev.ns.reduce((c, n, k) => c + (n.fixF && fs[k] !== n.fixF ? 1.5 : 0), 0),
     }));
-    return { t: g.t, end: Math.max(...ns.map((n) => n.e)), ns, qs, ps, opts };
   });
 
   // Malicek patri na zacatek, konec nebo bod obratu pasaze (R. Kelley: "starting place, stopping
@@ -191,7 +207,7 @@ export function fingerHand(notes, hand) {
         for (let k = 1; k < A.ns.length; k++) if (Math.abs(A.qs[k] - B.qs[j]) < Math.abs(A.qs[i] - B.qs[j])) i = k;
       }
       const gap = B.t - A.ns[i].e;
-      c += stepCost(fa[i], A.qs[i], A.ps[i], fb[j], B.qs[j], B.ps[j], gap, A.ns.length > 1 && B.ns.length > 1);
+      c += stepCost(fa[i], A.qs[i], A.ps[i], fb[j], B.qs[j], B.ps[j], gap, A.ns.length > 1 && B.ns.length > 1, A.still || B.still);
     }
     c /= B.ns.length;
     const rest = B.t - A.end;

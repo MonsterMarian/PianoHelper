@@ -52,14 +52,21 @@ def key_rects():
     return rects
 
 
-def render_video(path, duration=6.0):
+def render_video(path, duration=6.0, intro=0.0):
     rects = key_rects()
     kb_top, white_top, kb_bot = 300, 400, 470
     speed = 150.0                                  # px/s padani
     vw = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), FPS, (W, H))
-    for f in range(int(duration * FPS)):
-        t = f / FPS
+    for f in range(int((duration + intro) * FPS)):
         img = np.zeros((H, W, 3), np.uint8)
+        if f / FPS < intro:                        # uvodni karta: text bez klavesnice, blika
+            img[:] = (40, 30, 30)
+            for i in range(6):
+                if (f // 10 + i) % 3:
+                    cv2.rectangle(img, (60 + i * 120, 330 + (i % 2) * 60), (140 + i * 120, 360 + (i % 2) * 60), (255, 255, 255), -1)
+            vw.write(img)
+            continue
+        t = f / FPS - intro
         for m, s, e, hand in TRUTH:                # padajici noty
             x0, x1, _ = rects[m]
             y_bot, y_top = kb_top - (s - t) * speed, kb_top - (e - t) * speed
@@ -203,6 +210,20 @@ def test_synthetic_video():
             assert match, f'chybi nota {m} @ {s}: {found}'
             assert abs(match[0][2] - e) <= tol, (m, s, e, match)
             assert match[0][3] == hand, (m, s, hand, match)
+
+
+
+def test_intro_card_without_keyboard():
+    # 9 s uvodni karty (delsi nez pul okna klouzaveho medianu): zadne falesne noty, ostatni sedi
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, 'intro.mp4')
+        render_video(path, duration=20.0, intro=9.0)          # uvod je mensina videa jako ve skutecnosti
+        notes = detect_notes_from_video(path, DetectorConfig())
+        found = sorted((n.midi_note, round(n.start_time - 9.0, 2), n.hand) for n in notes)
+        truth = sorted(TRUTH)
+        assert len(found) == len(truth), found
+        # rezim zustane "klavesy se barvi" (uvod nesmi vypadat jako ruce pres klavesy) -> ruce podle barvy
+        assert all(abs(t - s) <= 1.5 / FPS and h == th for (_, t, h), (_, s, _, th) in zip(found, truth)), found
 
 
 if __name__ == '__main__':

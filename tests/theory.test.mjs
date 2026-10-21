@@ -214,6 +214,32 @@ test('uroven 3 = original, 4 a 5 = original + pridane noty, ruka nikdy pres okta
   assert.ok(counts[1] >= counts[0]);                            // mistr ma aspon tolik not jako pokrocile
 });
 
+test('urovne: snazsi = jen tony originalu, tezsi = cely original + pridane; tezka skladba ma original vys', async () => {
+  const { levelsFor } = await import('../web/js/arrange.js');
+  const fs = await import('node:fs');
+  const ode = JSON.parse(fs.readFileSync(new URL('../web/songs/oda-na-radost.json', import.meta.url), 'utf8')).notes;
+  // husta skladba: sestnactiny v obou rukou, akordy -> velmi tezka
+  const dense = [];
+  for (let i = 0; i < 160; i++) {
+    const t = i * 0.125;
+    [72 + (i % 5), 67 + (i % 3)].forEach((p) => dense.push({ p, s: t, e: t + 0.11, h: 'R' }));
+    [36 + (i % 4) * 2, 48].forEach((p) => dense.push({ p, s: t, e: t + 0.11, h: 'L' }));
+  }
+  const key = (n) => `${n.p}@${n.s.toFixed(3)}`;
+  for (const [name, notes, origAt] of [['oda', ode, 3], ['song', song().notes, 3], ['dense', dense, 5]]) {
+    const levels = levelsFor(splitHands(notes.map((n) => ({ ...n, h: n.h || '' }))));
+    assert.equal(levels.findIndex((l) => l.key === 'original') + 1, origAt, name);
+    const orig = new Set(notes.map(key));
+    for (const l of levels) {
+      const out = arrange(notes, l.id);
+      const keys = new Set(out.map(key));
+      if (l.id < origAt) assert.ok(out.every((n) => orig.has(key(n))), `${name} ${l.name}: ton mimo original`);
+      if (l.id > origAt) assert.ok(notes.every((n) => keys.has(key(n))), `${name} ${l.name}: chybi ton originalu`);
+      if (l.id < origAt && l.id > 1) assert.ok(out.length <= notes.length && out.length >= arrange(notes, l.id - 1).length, `${name} ${l.name}: pocet not`);
+    }
+  }
+});
+
 test('MusicXML: kazdy takt ma spravnou delku, zadna nota se neztrati', async () => {
   const { toMusicXML } = await import('../web/js/musicxml.js');
   const fs = await import('node:fs');
@@ -325,6 +351,17 @@ test('prstoklad: vsech 12 durovych stupnic - palec jen tam, kde ho ma ucebnice (
     }
   }
   assert.deepEqual(bad, []);
+});
+
+test('prstoklad jako klaviristka (Levels): ruka stoji v poloze -> palec na cerne, zadne zbytecne krizeni', () => {
+  // C#6 samotne, pak E6 + G#6, dokola: palec na C#6 (ruka se nehybe)
+  const a = [];
+  for (let i = 0; i < 8; i++) a.push({ p: 88, s: i * 0.47, e: i * 0.47 + 0.2 }, { p: 92, s: i * 0.47, e: i * 0.47 + 0.2 }, { p: 85, s: i * 0.47 + 0.23, e: i * 0.47 + 0.43 });
+  fingerHand(a, 'R');
+  assert.ok(a.filter((n) => n.p === 85).slice(1, -1).every((n) => n.f === 1), a.filter((n) => n.p === 85).map((n) => n.f).join(''));
+  // G#5 F#5 E5 C#5 E5 C#5: melodie se vraci v poloze -> zadny podklad ani preklad
+  const m = fingerHand(seq([80, 78, 76, 73, 76, 73], 0.25), 'R');
+  for (let i = 1; i < m.length; i++) assert.ok((m[i].p - m[i - 1].p) * (m[i].f - m[i - 1].f) > 0, m.map((n) => n.f).join(''));
 });
 
 test('nazvy not podle toniny: becka v b-tonina ch, krizky jinde', async () => {

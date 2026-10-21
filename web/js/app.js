@@ -1,4 +1,4 @@
-import { arrange, LEVELS } from './arrange.js';
+import { arrange, LEVELS, levelsFor, STEP_ORDER } from './arrange.js';
 import { estimateGrid, chordTrack, detectKey } from './analysis.js';
 import { Player, PIANOS } from './audio.js';
 import { draw, drawOverview, drawBars, drawKeyMap, drawBarGrid, layoutKeys, keyRange, HANDLE, resetColors } from './render.js';
@@ -18,10 +18,13 @@ const prefs = (() => { try { return JSON.parse(localStorage.getItem('pianohelper
 // obtiznosti 2.0: originál je uroven 3 (driv 4) - prevest ulozenou volbu
 if (prefs.level && !prefs.levels2) { prefs.level = { 1: 1, 2: 2, 3: 2, 4: 3, 5: 5 }[prefs.level] || 3; }
 prefs.levels2 = true;
+// obtiznosti 3.0: uklada se krok zebriku (napr. 'original'), cislo urovne zavisi na skladbe
+if (!prefs.step) prefs.step = LEVELS[(prefs.level || 3) - 1].key;
+delete prefs.level;
 const savePrefs = () => { try { localStorage.setItem('pianohelper', JSON.stringify(prefs)); } catch { /* soukrome okno */ } };
 
 const state = {
-  title: '', file: '', base: [], grid: null, chords: [], key: null, level: prefs.level ?? 3,
+  title: '', file: '', base: [], grid: null, chords: [], key: null, level: 3, levels: LEVELS,
   notes: [], cache: new Map(), duration: 0, lo: 48, hi: 84, loop: null, loopOn: false,
   library: [], pressed: new Map(), octave: prefs.octave ?? 4,
   range: prefs.range ?? '61', custom: prefs.custom ?? null, songLo: 60, songHi: 72, bars: [0, 1],
@@ -105,6 +108,11 @@ function setSong(title, notes) {
   state.cache.clear();
   state.loop = null; state.loopOn = false;
   state.key = detectKey(state.base);
+  state.levels = levelsFor(state.base);
+  // ulozeny krok (nebo nejblizsi, ktery skladba ma - tezka skladba nema "Mistr")
+  const want = STEP_ORDER.indexOf(prefs.step);
+  state.level = state.levels.reduce((b, l) => (Math.abs(STEP_ORDER.indexOf(l.key) - want) < Math.abs(STEP_ORDER.indexOf(b.key) - want) ? l : b)).id;
+  renderLevels();
   const parsed = parseTitle(title);
   $('title').textContent = parsed.name;
   $('title').title = title;
@@ -132,7 +140,7 @@ function applyLevel() {
   state.bars = barTimes(state.grid, Math.max(state.duration, songEnd(state.base)));
   if (state.loop) setLoop(state.loop.from, state.loop.to, state.loopOn);
   for (const b of $('levels').children) b.setAttribute('aria-pressed', String(Number(b.dataset.level) === state.level));
-  $('level-name').textContent = LEVELS.find((l) => l.id === state.level).name;
+  $('level-name').textContent = state.levels[state.level - 1].name;
 }
 
 // Viditelny vyrez klaviatury (61 klaves jako ve videich, nebo co si uzivatel zvoli)
@@ -270,17 +278,24 @@ for (const l of LEVELS) {
   const b = document.createElement('button');
   b.type = 'button';
   b.dataset.level = l.id;
-  b.title = `${l.name} — ${l.hint} (${l.id})`;
   b.innerHTML = `<b>${l.id}</b>`;
-  b.setAttribute('aria-label', `${l.id} ${l.name}: ${l.hint}`);
   b.addEventListener('click', () => setLevel(l.id));
   $('levels').append(b);
 }
-function setLevel(id) { state.level = id; prefs.level = id; savePrefs(); applyLevel(); }
+// Popisky podle skladby: u tezke skladby je originál 4 nebo 5 (pod nim jen zjednoduseni).
+function renderLevels() {
+  for (const b of $('levels').children) {
+    const l = state.levels[Number(b.dataset.level) - 1];
+    b.title = `${l.name} — ${l.hint} (${l.id})`;
+    b.setAttribute('aria-label', `${l.id} ${l.name}: ${l.hint}`);
+    b.classList.toggle('orig', l.key === 'original');
+  }
+}
+function setLevel(id) { state.level = id; prefs.step = state.levels[id - 1].key; savePrefs(); applyLevel(); }
 
 $('export').addEventListener('click', () => {
   if (!state.notes.length) return;
-  const level = LEVELS.find((l) => l.id === state.level).name;
+  const level = state.levels[state.level - 1].name;
   const xml = toMusicXML(state.notes, state.grid, `${state.title} (${level})`, state.key);
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([xml], { type: 'application/vnd.recordare.musicxml+xml' }));

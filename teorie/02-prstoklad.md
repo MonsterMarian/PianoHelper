@@ -169,18 +169,21 @@ Avicii – Levels (Pianella Piano, video s rukama, 1080p). Prsty jsme odečítal
 | levá ruka: E2, pak H2+E3 | 5, pak 2-1 (palec připravený na E3) | 5, pak 2-1 | ✔ |
 | pravá ruka: akord G♯4-H4-E5 | 1-2-5 | 1-2-5 | ✔ |
 | pravá ruka: oktávy E5–E6 | 1-5 | 1-5 | ✔ |
-| úvod, pravá: C♯6, pak E6+G♯6 dokola | ruka v jedné poloze: **palec na C♯6**, 2 na E6, 3 (4) na G♯6 | 2 na C♯6, 3-5 na E6+G♯6 | ✘ |
-| melodie dolů G♯5 F♯5 E5 C♯5 | ruka stojí, C♯5 ukazovákem, E5 prostředníkem | E5 palcem, pak C♯5 dvojkou přes palec | ✘ |
+| úvod, pravá: C♯6, pak E6+G♯6 dokola | ruka v jedné poloze: **palec na C♯6**, 2 na E6, 3 (4) na G♯6 | dřív 2 na C♯6; **teď palec na C♯6**, 3-5 na E6+G♯6 | ✔ (po opravě) |
+| melodie dolů G♯5 F♯5 E5 C♯5 E5 | ruka stojí, C♯5 ukazovákem, E5 prostředníkem | dřív E5 palcem a C♯5 dvojkou přes palec; **teď E5 = 3, C♯5 = 2** | ✔ (po opravě) |
 
-Co z toho plyne:
+Co jsme podle toho změnili (testy v `tests/theory.test.mjs`):
 
-- **Palec na černé klávese v melodii** trestáme moc (5 bodů). Klavíristka ho bez problému dá na
-  C♯, když ruka stojí na místě a nemusí se přes palec nic podkládat. Učebnicové pravidlo „palec
-  ne na černou“ platí hlavně pro stupnice a běhy, kde se palec podkládá.
-- **Poloha ruky:** když se motiv vejde do pěti prstů, klavíristka nechá ruku stát a nepřekládá.
-  Model občas zvolí podklad nebo překlad uvnitř polohy. V této skladbě je to vzácné (pravá ruka
-  11 z 627 jednotlivých tónů), ale je to vidět.
-- Akordy, oktávy a levá ruka odpovídají.
+- **Ruka stojí v poloze**, když se okolí (±3 události do 1,5 s, aspoň 6 událostí) vejde do
+  7 půltónů. Pak palec na černé v melodii stojí 3 body místo 5 a Parncuttova pravidla 10 a 11
+  (palec / malíček mezi černou a bílou) jen 0,5 místo 2. Pravidla jsou stavěná na stupnice
+  a běhy, kde se palec podkládá; když ruka stojí, klavíristé palec na černou dají.
+  Podmínka „aspoň 6 událostí“ je nutná: začátek stupnice C D E F se taky vejde do pěti prstů.
+- **Zbytečné křížení:** podklad / překlad, po kterém se melodie hned obrátí a všechny tři tóny
+  se vejdou do 7 půltónů, stojí +2. Ve stupnici ruka pokračuje dál, tady by se jen vrátila.
+- Audit na 19 skladbách × 5 úrovních (znovu převedená knihovna, nové úrovně): „palec na černé
+  v krokové melodii“ 281 → 327 (záměr: palec v poloze), stejný prst v legatu 110 → 90,
+  rozpětí přes mez 3 → 2. Všech 12 durových stupnic dál podle ABRSM.
 
 ## Omezení a plán
 

@@ -396,11 +396,13 @@ def _flash_ranges(kb: KeyboardLayout) -> np.ndarray:
             m = max(1, (b - a) // 4)
             out.append((a + m, b - m))
             continue
+        c = (a + b) / 2
         for bl, br in blacks:
-            if bl <= a < br:
-                a = br
-            elif bl < b <= br:
-                b = bl
+            if bl < b and br > a:                # cerna zasahuje do bile: odriznout tu stranu
+                if (bl + br) / 2 < c:
+                    a = max(a, br)
+                else:
+                    b = min(b, bl)
         out.append((a + 1, max(a + 2, b - 1)))
     return np.array(out)
 
@@ -671,15 +673,26 @@ def detect_notes_from_video(video_path: str, config: Optional[DetectorConfig] = 
         return []
 
     colors = np.stack(colors)
+    hits, flashes = np.stack(hits).astype(np.float32), np.stack(flashes)
     times = np.array(times)
     dt = config.frame_skip / fps
+    # Snimky bez klavesnice (uvodni karta, titulky, prechod): vetsina klaves se lisi od medianu.
+    # Dosadi se do nich klidova klavesnice - jinak by se je klouzavy median naucil jako pozadi
+    # a zmeny textu by vypadaly jako noty (Climax JUMPING: 6 s uvodu = 30 falesnych not).
+    med_colors = _key_colors(med, kb, white_rows, black_rows, ranges, is_black)
+    gone = np.median(np.linalg.norm(colors - med_colors, axis=2), axis=1) > 1.5 * config.lit_threshold
+    if gone.any():
+        print(f"  Bez klavesnice (uvod, titulky): {gone.sum() * dt:.1f} s")
+        colors[gone] = med_colors
+        hits[gone] = _hit_line_colors(med, kb, ranges)
+        flashes[gone] = _band_luma(med, flash_y, flash_rg)
     lit = _changed(colors, 1 / dt, config.lit_threshold)
-    hit = _changed(np.stack(hits).astype(np.float32), 1 / dt, config.lit_threshold)
+    hit = _changed(hits, 1 / dt, config.lit_threshold)
     if lit.mean() > hit.mean():
         # Synthesia: linie nad klavesou je aktivni aspon tak dlouho jako klavesa (0,3-0,55x).
         # Klavesy se meni vic nez linie = natocene ruce, ktere klavesy zakryvaji.
         print("  Klavesy zakryvaji ruce - ctu noty ze zablesku nad klavesnici")
-        notes = _flash_notes(np.stack(flashes), kb, times, dt)
+        notes = _flash_notes(flashes, kb, times, dt)
     else:
         if lit.mean() * 5 < hit.mean():
             print("  Klavesy se v tomto videu nebarvi - ctu noty z linie dopadu")

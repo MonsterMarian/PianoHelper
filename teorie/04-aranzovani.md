@@ -3,24 +3,45 @@
 Kód: `web/js/arrange.js`. Vstup = noty skladby (s rukama), výstup = noty pro danou úroveň
 s rukou a prstem.
 
-Hlavní myšlenka: **čím je verze snazší, tím méně not se hraje naráz a tím méně se ruka
-pohybuje. Melodie (to, co si člověk zpívá) ale zůstává.**
+Hlavní myšlenka: **každá verze zní jako originál.** Snazší verze jsou jen *podmnožina* not
+originálu (stejné tóny ve stejném čase, nic vymyšleného), těžší verze jsou *celý originál +
+přidané noty*. Melodie a bas zůstávají nejdéle, ubírá se nejdřív to ostatní (vnitřní hlasy,
+ozdoby, zdvojení) – stejně jako u statistické redukce klavírních partů (Nakamura a kol. 2018,
+[arXiv:1808.05006](https://arxiv.org/abs/1808.05006)) i u ručních úprav „easy piano“
+([Songscription](https://www.songscription.ai/blog/simplify-sheet-music-guide): melodie zůstane,
+akordy v pravé ruce na jeden tón, levá ruka na basový tón, pryč ozdoby).
 
-| úroveň | pravá ruka | levá ruka | pro koho |
+### Žebřík verzí
+
+| krok | pravá ruka | levá ruka | vztah k originálu |
 |---|---|---|---|
-| 1 Začátečník | hlavní tóny melodie: jeden na dobu, u rychlých skladeb na půl taktu (≥ 0,6 s od sebe) | nic | první seznámení |
-| 2 Snadné | celá melodie (bez ozdob) | 1 basový tón na takt (a při změně akordu ≥ 2 doby) | začátečník, obě ruce |
-| **3 Originál** | jak ve videu | jak ve videu | — |
-| 4 Pokročilé | + tón akordu (tercie/sexta) pod dlouhé tóny melodie | držené basy → rozložené akordy v osminách | pokročilý |
-| 5 Mistr | jako 4 + oktávy pod melodií | jako 4 | pokročilý+ |
+| Začátečník | hlavní tóny melodie: jeden na dobu, u rychlých skladeb na půl taktu (≥ 0,6 s od sebe) | nic | podmnožina |
+| Snadné | celá melodie (bez ozdob) | původní basový tón na takt / změnu akordu | podmnožina |
+| Střední | celá melodie | levá ruka z originálu: nástupy aspoň ½ doby od sebe, nejvýš 2 tóny (bas + horní) | podmnožina |
+| Skoro originál | originál bez ozdob a šestnáctin (nástupy ≥ ⅓ doby od sebe), akordy nejvýš 3 tóny (melodie + 2 nejbližší) | totéž (bas + 2 nejbližší) | podmnožina |
+| **Originál** | jak ve videu | jak ve videu | — |
+| Pokročilé | + tón akordu (tercie/sexta) pod dlouhé tóny melodie | držený bas zůstane, přidá se rozklad 5-2-1-2 | nadmnožina |
+| Mistr | jako Pokročilé + oktávy pod melodií | jako Pokročilé | nadmnožina |
 
-Originál je uprostřed (2 úrovně snazší, 2 těžší). Dřív byla „Melodie“ úroveň 1, ale u skladeb,
-kde pravá ruka hraje jen melodii (Jujutsu Kaisen), byla skoro stejně těžká jako originál. Proto
-úroveň 1 melodii zjednodušuje rytmicky: v každé době (u rychlých skladeb v každé půlce taktu)
-zůstane jen tón, který začíná na době a je nejdelší. Kaikai Kitan (161 BPM): úroveň 1 = 1,2 noty/s,
-originál 5,1 noty/s.
+### Kde je originál
 
-Při stavbě úrovní 4 a 5 jdou nejdřív rozložené akordy v levé ruce, pak doplňky pravé ruky,
+Pět tlačítek je **okno do žebříku** podle obtížnosti originálu. Když je originál sám těžký,
+nemá smysl nad něj vymýšlet ještě těžší verzi – pro učení je potřeba víc kroků dolů.
+
+| obtížnost originálu (p90 D) | 1 | 2 | 3 | 4 | 5 |
+|---|---|---|---|---|---|
+| < 10 (EASY tutoriály) | Začátečník | Snadné | **Originál** | Pokročilé | Mistr |
+| 10–14 | Začátečník | Snadné | Střední | **Originál** | Pokročilé |
+| ≥ 14 (plný cover, např. Levels) | Začátečník | Snadné | Střední | Skoro originál | **Originál** |
+
+**Obtížnost D** (podle Nakamury: součet za obě ruce v 1s oknech): každý nástup = 1, každý další
+tón akordu = 0,5, přesun ruky o víc než kvartu = (vzdálenost − 5) / 7. Bere se 90. percentil
+oken. V knihovně: Óda na radost 3, EASY tutoriály Jujutsu Kaisen 5–9, Levels (Pianella) 18.
+
+Přehrávač si pamatuje **krok** (např. „Originál“), ne číslo – po přepnutí na těžší skladbu
+zůstane originál originálem. Tlačítko s originálem má dole rumělkovou linku.
+
+Při stavbě Pokročilé a Mistr jdou nejdřív rozložené akordy v levé ruce, pak doplňky pravé ruky,
 a ty jen nad levou rukou, aby se ruce nesrazily.
 
 ## Kroky
@@ -35,29 +56,30 @@ a ty jen nad levou rukou, aby se ruce nesrazily.
 4. **Legato:** tón drží do dalšího tónu melodie, nejdéle však původní délku. Rytmus se tedy
    nemění, jen zmizí mezery mezi tóny.
 
-### Bas (úroveň 2)
+### Bas (Snadné)
 
 Podle mřížky z [01-analyza.md](01-analyza.md) a akordů:
 
 - sloty = začátky taktů (a začátek akordu, pokud trvá ≥ 2 doby; kratší změna uprostřed taktu
   se vynechá). Doby jsou časy ze sledování dob, takže bas sedí i při změně tempa,
-- tón = **nejnižší původní tón levé ruky**, pokud patří do akordu (zachová se basová linka
-  i obraty), jinak **základ akordu** v rozsahu C2–B3,
+- tón = **nejnižší původní tón levé ruky, který v okně začíná** (s jeho původním začátkem),
+  takže zůstane basová linka i obraty. Když v okně žádný nezačíná, nepřidá se nic – dřív se
+  doplňoval základ akordu, ale to už nebyl tón originálu,
 - strop = nejnižší tón melodie v daném úseku − 3 půltóny, aby se ruce nesrazily.
 
-### Držení basu (úroveň 2)
+### Držení basu (Snadné)
 
 Každý tón levé ruky drží až do dalšího tónu levé ruky (nejdéle takt, nejdéle do konce
 skladby). Přeskočená krátká změna akordu uprostřed taktu tak nenechá díru: v notách jsou celé
 noty, žádné pomlky.
 
-### Ozdoby (úrovně 4 a 5)
+### Ozdoby (Pokročilé a Mistr)
 
 - **Oktávy:** pod tón melodie delší než ~1 doba se přidá tón o oktávu níž, pokud pod ním
   v pravé ruce nic není a ruka se vejde do oktávy.
-- **Rozložené akordy:** držený basový tón levé ruky (≥ 2 doby, patří do akordu) se nahradí
-  osminovým vzorem *základ – kvinta – oktáva – kvinta*, tzv. Albertiho/„pop“ bas.
-  Tóny nad melodii se vynechají.
+- **Rozložené akordy:** k drženému basovému tónu levé ruky (≥ 2 doby, patří do akordu) se
+  přidá osminový vzor *kvinta – oktáva – kvinta* (prsty 2-1-2), bas drží malíček celou délku.
+  Původní tón tedy zůstane, jen se k němu přidá pohyb. Tóny nad melodii se vynechají.
 
 ### Nakonec pro každou úroveň
 
@@ -73,23 +95,23 @@ noty, žádné pomlky.
 
 ## Ověření
 
-`tests/theory.test.mjs` na umělé skladbě (melodie + druhý hlas + výplňové tóny + akordy):
+`tests/theory.test.mjs`:
 
-- úroveň 1 = přesně melodie, vždy jedna nota naráz, všechny noty mají prst,
-- úroveň 2: levá ruka vždy nejvýš 1 nota, úroveň 3 nejvýš 2; levá ruka je celá pod melodií;
-  pro akord C dur hraje C (úroveň 2) a C + G (úroveň 3),
-- úroveň 3: v C – Am – F – G – C skáče horní hlas levé ruky nejvýš o 4 půltóny,
-- Óda na radost, úroveň 2: v každém taktu jeden bas, drží celý takt,
-- zrychlující skladba s rubatem: každý bas sedí na skutečné době a každý takt má bas,
-- úroveň 4 = originál beze změny,
-- úroveň 5 obsahuje všechny noty pravé ruky originálu, přidané noty jsou označené
+- **slib úrovní** na Ódě, umělé skladbě a husté skladbě (šestnáctiny v obou rukou): pod
+  originálem je každý tón i v originálu (výška + začátek), nad originálem je celý originál;
+  každá snazší úroveň má nejvýš tolik not jako originál a aspoň tolik jako úroveň pod ní;
+  Óda a umělá skladba mají originál na 3, hustá skladba na 5,
+- Začátečník = přesně hlavní tóny melodie, vždy jedna nota naráz, ≥ 0,9 s od sebe při 120 BPM,
+- Snadné: levá ruka vždy nejvýš 1 nota a celá pod melodií, v C dur hraje C,
+- Snadné při změně tempa (rubato): bas sedí na skutečné době a každý takt má bas,
+- Óda na radost, Snadné: v každém taktu jeden bas, drží celý takt,
+- Pokročilé a Mistr: všechny noty pravé ruky originálu zůstanou, přidané noty jsou označené
   a žádná ruka nepřesáhne oktávu.
-
-Reálná videa (Fourth of July, Ma Meilleure Ennemie): úroveň 1 má 1/3 až 1/2 počtu not
-originálu, úroveň 2 přidá ~1 tón na takt. Výpočet všech úrovní trvá pod 0,6 s.
 
 ## Plán
 
 - Vícehlasá analýza místo skyline (melodie v levé ruce nebo uprostřed).
 - Volitelná transpozice do „bílé“ tóniny (C dur / a moll) pro úplné začátečníky.
-- Zjednodušení rytmu (synkopy na dobu) pro úroveň 1.
+- Zjednodušení rytmu (synkopy na dobu) pro Začátečníka.
+- Melodie, která je v originálu jen v levé ruce, se do snadných verzí nedostane (skyline bere
+  pravou ruku).
