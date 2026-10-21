@@ -12,7 +12,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from note_detector import (DetectedNote, DetectorConfig, assign_hands, detect_keyboard,  # noqa: E402
-                           detect_notes_from_video, median_frame, parse_note_name)
+                           detect_notes_from_video, drop_bursts, fix_hand_spans, median_frame, parse_note_name)
 
 FPS = 30
 W, H = 854, 480
@@ -96,6 +96,60 @@ def test_assign_hands_by_color():
     assert all(n.hand == 'L' for n in notes[:5]) and all(n.hand == 'R' for n in notes[5:])
     same = [DetectedNote(40 + i, i, i + 1, color_hsv=(105, 200, 200)) for i in range(8)]
     assert not assign_hands(same)          # jedna barva = ruce nerozlisit
+
+
+def test_assign_hands_four_similar_colors():
+    # "give it back": leva = zluta (bile) + oranzova (cerne), prava = jina zluta (bile) + zelena (cerne);
+    # odstin bilych se lisi jen o 8 stupnu. Navic par not ma barvu zablesku (bila/seda).
+    import random
+    rnd = random.Random(1)
+    notes = []
+    for i in range(60):
+        lp = rnd.choice([41, 43, 45, 47, 48])               # bile, leva
+        rp = rnd.choice([65, 67, 69, 71, 72, 74])            # bile, prava
+        notes.append(DetectedNote(lp, i, i + .5, color_hsv=(28, 230, 250), hand='?L'))
+        notes.append(DetectedNote(rp, i, i + .5, color_hsv=(32, 225, 245), hand='?R'))
+        if i % 3 == 0:
+            notes.append(DetectedNote(42, i + .5, i + .9, color_hsv=(16, 220, 240), hand='?L'))   # cerna, leva
+            notes.append(DetectedNote(70, i + .5, i + .9, color_hsv=(50, 230, 220), hand='?R'))   # cerna, prava
+    notes.append(DetectedNote(60, 30.2, 30.6, color_hsv=(0, 0, 255), hand='?R'))    # zablesk uprostred, okoli prava
+    for n in notes:
+        n.hand, n.truth = '', n.hand[1]
+    assert assign_hands(notes)
+    wrong = [n for n in notes if n.hand != n.truth]
+    assert len(wrong) <= 1, [(n.note_name, n.color_hsv, n.hand) for n in wrong]
+
+
+def test_drop_bursts():
+    chord = [DetectedNote(60 + i, 1.0, 2.0) for i in range(10)]           # 10 prstu = jeste hudba
+    burst = [DetectedNote(40 + i, 5.0, 5.5) for i in range(30)]           # zablesk pres celou klavesnici
+    kept = drop_bursts(chord + burst + [DetectedNote(72, 5.2, 5.6)])
+    assert len(kept) == 11 and all(n.start_time != 5.0 for n in kept)
+
+
+def test_fix_hand_spans():
+    # zaverecny akord obarveny jako leva ruka: C3 E3 A3 + C5 E5 -> horni tony do prave ruky
+    final = [DetectedNote(p, 10.0, 12.0, hand='L') for p in (48, 52, 57, 72, 76)]
+    assert fix_hand_spans(final) == 2
+    assert [n.hand for n in final] == ['L', 'L', 'L', 'R', 'R']
+    # kdyz druha ruka hraje, nic se neprehazuje (muze to byt zamer)
+    both = [DetectedNote(48, 1.0, 2.0, hand='L'), DetectedNote(72, 1.0, 2.0, hand='L'), DetectedNote(76, 1.0, 2.0, hand='R')]
+    assert fix_hand_spans(both) == 0
+
+
+def test_keyboard_without_separator_lines():
+    # nektera videa nemaji mezi bilymi klavesami viditelne cary -> mrizka z cernych klaves
+    img = np.zeros((H, W, 3), np.uint8)
+    for m, (x0, x1, is_b) in sorted(key_rects().items(), key=lambda kv: kv[1][2]):
+        if is_b:
+            cv2.rectangle(img, (x0, 300), (x1, 395), (20, 20, 20), -1)
+        else:
+            cv2.rectangle(img, (x0, 300), (x1, 470), (245, 245, 245), -1)
+    kb = detect_keyboard(img)
+    assert kb is not None and kb.pattern_score == 1.0
+    whites = [k for k in kb.keys if not k.is_black]
+    assert len(whites) == N_WHITE, len(whites)
+    assert whites[0].midi_note == FIRST
 
 
 def test_synthetic_video():

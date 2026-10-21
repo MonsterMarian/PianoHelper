@@ -109,9 +109,6 @@
           <canvas id="timeline" class="timeline" aria-label="Takty: klik = skok, tažení = úsek, kolečko = přiblížení"></canvas>
         </div>
         <div class="tl-tools" role="group" aria-label="Časová osa">
-          <button id="tl-lock" class="key-btn square" aria-pressed="true" title="Sledovat přehrávání (osa jede s hudbou)" aria-label="Sledovat přehrávání">
-            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path class="shackle" d="M8 10.5V7.5a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-          </button>
           <button id="tl-out" class="key-btn square" aria-label="Oddálit (víc taktů)" title="Oddálit">−</button>
           <button id="tl-in" class="key-btn square" aria-label="Přiblížit (míň taktů)" title="Přiblížit">+</button>
         </div>
@@ -139,6 +136,7 @@
           <div class="row">
             <label class="chip"><input id="letters" type="checkbox" checked><span>Písmena</span></label>
             <label class="chip"><input id="fingers" type="checkbox"><span>Prsty</span></label>
+            <label class="chip" title="Kam položit ruce: lišta přes 5 kláves s čísly prstů"><input id="hand-pos" type="checkbox" checked><span>Ruce</span></label>
           </div>
         </div>
 
@@ -217,7 +215,7 @@
 
       <section class="field">
         <span class="label">Zkratky</span>
-        <p class="hint">Mezerník hrát · ← → takt zpět/vpřed · [ ] předchozí/další úsek · L opakovat · V pohled · F celá obrazovka · 1–5 obtížnost · P prsty · N písmena · M čekej na mě · K knihovna (v režimu čekání patří písmena klavíru)</p>
+        <p class="hint">Mezerník hrát · ← → takt zpět/vpřed · [ ] předchozí/další úsek · L opakovat · V pohled · F celá obrazovka · 1–5 obtížnost · P prsty · R poloha rukou · N písmena · M čekej na mě · K knihovna (v režimu čekání patří písmena klavíru)</p>
       </section>
     </div>
   </dialog>

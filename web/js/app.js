@@ -6,6 +6,7 @@ import { barTimes, barAt, loopBars, loopFromTimes, shiftLoop } from './loop.js';
 import { songEnd, noteName, isBlack } from './music.js';
 import { toMusicXML } from './musicxml.js';
 import { keyboardInput, midiInput } from './input.js';
+import { handWindows } from './hands.js';
 
 const $ = (id) => document.getElementById(id);
 const player = new Player();
@@ -264,7 +265,6 @@ function togglePlay() {
     const l = player.loop;
     if (l && (player.now() < l.a - l.pre - 0.01 || player.now() >= l.b)) player.seek(l.a - l.pre);
     player.play();
-    setLocked(true);
   }
   syncPlay();
 }
@@ -290,14 +290,14 @@ function setLoop(from, to, on = true) {
   updateLoopUi();
 }
 const currentBar = () => barAt(state.bars, player.now() + 0.05);
-function jumpToLoop(lock = false) {
+function jumpToLoop() {
   if (!player.loop) return;
   player.seek(player.loop.a - player.loop.pre);
-  if (lock) setLocked(true);                                   // tlacitka useku: osa ukaze novy usek
+  showInTimeline(player.loop.a - player.loop.pre);             // tlacitka useku: osa ukaze novy usek
 }
 
 $('loop').addEventListener('click', () => {
-  if (!state.loop) { setLoop(currentBar(), currentBar() + loopLen()); jumpToLoop(true); return; }
+  if (!state.loop) { setLoop(currentBar(), currentBar() + loopLen()); jumpToLoop(); return; }
   state.loopOn = !state.loopOn;
   updateLoopUi();
   if (state.loopOn && (player.now() < state.loop.a - 2 || player.now() >= state.loop.b)) jumpToLoop();
@@ -307,27 +307,29 @@ function stepLoop(dir) {
   if (!state.loop || !state.loopOn) {
     const len = state.loop ? state.loop.to - state.loop.from : loopLen();
     setLoop(currentBar(), currentBar() + len);
-    jumpToLoop(true);
+    jumpToLoop();
     return;
   }
   const next = shiftLoop(state.bars, state.loop, dir);
   setLoop(next.from, next.to);
-  jumpToLoop(true);
+  jumpToLoop();
 }
 $('loop-prev').addEventListener('click', () => stepLoop(-1));
 $('loop-next').addEventListener('click', () => stepLoop(1));
 $('loop-len').addEventListener('change', () => {
   const from = state.loop ? state.loop.from : currentBar();
   setLoop(from, from + loopLen());
-  jumpToLoop(true);
+  jumpToLoop();
 });
 
 // ── Casova osa: prehled cele skladby + detail po taktech ────────────────────
-// Detail ukazuje okno [t0, t0 + span]. Zamceno = okno jede s prehravanim (pozice ve 1/4 okna).
+// Detail ukazuje okno [t0, t0 + span]. Kdyz pozice z okna uteče, osa se "prelistuje" dal
+// (jako v hudebnich programech); po rucnim posunu chvili ne, at uzivatele neprepere.
 // Klik = skok (mimo usek usek vypne), tazeni = novy usek, uchyty = okraje, tazeni uvnitr = posun.
 const tl = $('timeline');
 const ov = $('overview');
-const tlView = { t0: 0, span: 0, locked: true, zoomBars: null };
+const tlView = { t0: 0, span: 0, zoomBars: null, manualUntil: 0 };
+window.pianoHelper.tl = tlView;
 const avgBar = () => (state.bars.length > 1 ? (state.bars[state.bars.length - 1] - state.bars[0]) / (state.bars.length - 1) : 2);
 function viewSpan() {
   // vychozi priblizeni: takt aspon ~56 px; uzivatel meni kolecko / + -
@@ -338,15 +340,11 @@ function clampView() {
   tlView.span = viewSpan();
   tlView.t0 = Math.max(0, Math.min(tlView.t0, (state.duration || 0) - tlView.span));
 }
-function followPlayhead(now, smooth) {
-  const target = now - tlView.span * 0.25;
-  tlView.t0 = smooth && Math.abs(target - tlView.t0) < tlView.span ? tlView.t0 + (target - tlView.t0) * 0.2 : target;
+function showInTimeline(t) {
+  if (t < tlView.t0 || t > tlView.t0 + tlView.span * 0.95) tlView.t0 = t - tlView.span * 0.1;
   clampView();
 }
-function setLocked(on) {
-  tlView.locked = on;
-  $('tl-lock').setAttribute('aria-pressed', String(on));
-}
+const manualPan = () => { tlView.manualUntil = performance.now() + 4000; };
 function zoom(factor, anchorX = tl.clientWidth * 0.25) {
   const tAnchor = tlView.t0 + (anchorX / tl.clientWidth) * tlView.span;
   const total = Math.max(1, state.bars.length - 1);
@@ -356,13 +354,12 @@ function zoom(factor, anchorX = tl.clientWidth * 0.25) {
   tlView.t0 = tAnchor - (anchorX / tl.clientWidth) * tlView.span;
   clampView();
 }
-$('tl-lock').addEventListener('click', () => { setLocked(!tlView.locked); if (tlView.locked) followPlayhead(player.now(), false); });
 $('tl-in').addEventListener('click', () => zoom(1 / 1.5));
 $('tl-out').addEventListener('click', () => zoom(1.5));
 tl.addEventListener('wheel', (ev) => {
   ev.preventDefault();
   if (Math.abs(ev.deltaX) > Math.abs(ev.deltaY) || ev.shiftKey) {        // posun do strany = odemknout
-    setLocked(false);
+    manualPan();
     tlView.t0 += ((ev.shiftKey ? ev.deltaY : ev.deltaX) / tl.clientWidth) * tlView.span;
     clampView();
   } else zoom(ev.deltaY > 0 ? 1.25 : 1 / 1.25, ev.offsetX);
@@ -393,7 +390,7 @@ tl.addEventListener('pointermove', (ev) => {
     return;
   }
   if (!drag.moved && Math.abs(x - drag.x0) < 5) return;       // klik, ne tazeni
-  if (!drag.moved) setLocked(false);                            // behem tazeni osa neujizdi
+  manualPan();                                                  // behem tazeni osa neujizdi
   drag.moved = true;
   const bar = barAt(state.bars, tlTime(x));
   if (drag.part === 'a') setLoop(Math.min(bar, drag.to - 1), drag.to);
@@ -427,17 +424,18 @@ ov.addEventListener('pointerdown', (ev) => {
   const t = ovTime(ev);
   if (t >= tlView.t0 && t <= tlView.t0 + tlView.span && tlView.span < state.duration) {
     ovDrag = { grab: t - tlView.t0 };
-    setLocked(false);
+    manualPan();
     ov.setPointerCapture(ev.pointerId);
   } else {
     if (state.loopOn && state.loop && (t < state.loop.a || t >= state.loop.b)) { state.loopOn = false; updateLoopUi(); }
     player.seek(t);
-    followPlayhead(t, false);
+    showInTimeline(t);
   }
 });
 ov.addEventListener('pointermove', (ev) => {
   if (!ovDrag) return;
   tlView.t0 = ovTime(ev) - ovDrag.grab;
+  manualPan();
   clampView();
 });
 ov.addEventListener('pointerup', () => { ovDrag = null; });
@@ -486,6 +484,7 @@ const bindCheck = (id, key, def, fn) => {
 };
 bindCheck('letters', 'letters', true);
 bindCheck('fingers', 'fingers', false);
+bindCheck('hand-pos', 'handPos', true);
 bindCheck('echo', 'echo', true);
 bindCheck('mine-r', 'mineR', false, () => player.setMute('R', $('mine-r').checked));
 bindCheck('mine-l', 'mineL', false, () => player.setMute('L', $('mine-l').checked));
@@ -540,6 +539,7 @@ document.addEventListener('keydown', (e) => {
   else if (k >= '1' && k <= '5') setLevel(Number(k));
   else if (k === 'p') $('fingers').click();
   else if (k === 'n') $('letters').click();
+  else if (k === 'r') $('hand-pos').click();
   else if (k === 'm') $('wait').click();
   else if (k === 'k') openLibrary();
   else return;
@@ -559,8 +559,10 @@ function frame() {
       showLetters: $('letters').checked, naming: $('naming').value,
       showFingers: $('fingers').checked, loop: state.loopOn ? state.loop : null,
       mine: { L: $('mine-l').checked, R: $('mine-r').checked }, pressed: state.pressed, waiting,
+      handWin: $('hand-pos').checked ? handWindows(state.notes, now) : null,
     }).lookahead;
-    if (tlView.locked && !drag) followPlayhead(now, player.playing); else clampView();
+    clampView();
+    if (!drag && !ovDrag && performance.now() > tlView.manualUntil) showInTimeline(now);
     const t1 = tlView.t0 + tlView.span;
     drawBars(tl, { notes: state.notes, bars: state.bars, meter: state.grid.meter, t0: tlView.t0, t1, now, loop: state.loop, loopOn: state.loopOn, lo: state.songLo, hi: state.songHi });
     drawOverview(ov, { notes: state.notes, duration: state.duration, now, loop: state.loop, loopOn: state.loopOn, t0: tlView.t0, t1, lo: state.songLo, hi: state.songHi });

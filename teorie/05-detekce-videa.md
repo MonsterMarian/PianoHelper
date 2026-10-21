@@ -16,8 +16,14 @@ kláves místo kláves.
    přes 1 s.
 2. **Pás bílých kláves** = nejdelší blok světlých řádků; **pás černých** = řádky nad ním,
    kde je světlo i tma.
-3. **Hranice bílých kláves** = tmavé dělicí čáry. Šířka klávesy se bere z autokorelace
-   (s kontrolou poloviční periody, protože šířky se střídají 30/31 px). Chybějící hranice se
+3. **Bílé klávesy dvěma metodami,** použije se ta, které líp sedí vzor černých kláves:
+   - A) dělicí čáry mezi bílými klávesami,
+   - B) mřížka z poloh černých kláves (5 mezer mezi černými = 1 oktáva = 7 bílých), když jsou
+     dělicí čáry skoro neviditelné (PianoGumi: 255 → 240).
+
+   **Hranice bílých kláves (A)** = tmavé dělicí čáry. Šířka klávesy se bere z autokorelace
+   (s kontrolou 1/2, 1/3 a 1/4 periody, protože neceločíselná šířka 26,7 px dá nejvyšší vrchol
+   u trojnásobku 80 px). Chybějící hranice se
    doplní do pravidelné mřížky.
 4. **Které C je C:** za každou bílou klávesou se zjistí, jestli po ní následuje černá. Vzor
    „2 černé, mezera, 3 černé, mezera“ jednoznačně určí název každé klávesy. Shoda vzoru se

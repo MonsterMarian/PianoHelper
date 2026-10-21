@@ -4,16 +4,29 @@ Kód: `web/js/hands.js`, barevné rozdělení v `note_detector.py` (`assign_hand
 
 ## 1. Z videa podle barvy
 
-Synthesia a většina tutoriálů barví ruce různě (např. modrá pravá, oranžová levá). Detektor u každé
-noty zaznamená barvu rozsvícené klávesy. Odstín (hue) je úhel na barevném kole, proto se shlukuje
-**2-means na kružnici** (průměr se počítá z vektorů cos/sin, aby červená 350° a 10° byla
-u sebe). Ruce se rozliší, když:
+Videa barví ruce různě. Často mají **4 barvy**: každá ruka jednu pro bílé a jednu pro černé
+klávesy (PianoGumi: levá červená/vínová, pravá tyrkysová/modrá). Někdy jsou odstíny obou rukou
+skoro stejné: „give it back“ má na bílých klávesách žlutou s rozdílem odstínu jen 8°. Postup:
 
-- shluky jsou od sebe aspoň 25°,
-- menší shluk má aspoň 5 % not.
+1. **Zvlášť bílé a zvlášť černé klávesy.** Na každém typu kláves má ruka jednu barvu.
+2. **Barva v Lab** (vnímaná vzdálenost barev), jas s poloviční váhou. Do shlukování jdou jen syté
+   noty a na bílých klávesách jen světlé, protože záblesky a stíny by shluky pokazily.
+3. **2-means**, dva shluky se uznají, když jsou středy od sebe aspoň 4× dál než rozptyl uvnitř.
+4. **Ruce se liší rejstříkem:** rozdělení platí, jen když se průměrná výška shluků liší aspoň
+   o 5 půltónů. Když ne, je menší shluk zbytek efektu: pokud má pod 15 %, vyřadí se a dělí se
+   znovu, jinak barvy ruce nerozlišují.
+5. **Shluk s nižší průměrnou výškou = levá ruka.**
+6. **Ostatní noty** (vyřazené, nebo typ kláves bez rozdílu barev) dostanou ruku podle not, které
+   zní ±1 s okolo: blíž k průměru levé, nebo pravé.
 
-Levá ruka = shluk s nižší průměrnou výškou. Odstín se nemění mezi bílou a černou klávesou
-(světlejší a tmavší varianta stejné barvy), takže to funguje i pro videa se čtyřmi barvami.
+Výsledek na 5 skladbách se 4 různými barevnými schématy: **0 křížení rukou a 0 akordů širších
+než oktáva**. „give it back“ dřív 14 : 246 not, teď 107 : 153.
+
+Pak dvě pojistky:
+- **Záblesky:** víc než 10 not se stejným začátkem (hráč má 10 prstů) je efekt videa
+  (závěrečný záblesk, přechod), zahodí se. Na playlistu Jujutsu Kaisen to bylo 20–70 not na video.
+- **Akord jedné ruky širší než oktáva,** když druhá ruka nic nezačíná: krajní tóny přejdou do druhé
+  ruky (`fix_hand_spans`, typicky závěrečný akord obarvený jednou barvou).
 
 ## 2. Bez barev (MIDI s jednou stopou, jednobarevné video)
 
@@ -47,5 +60,13 @@ hraje „ta druhá“ ruka.
 - Úroveň 2–3: levá ruka dostane bas pod melodií (strop = nejnižší tón melodie − malá tercie).
 - Úroveň 5: oktávové zdvojení melodie se přidá jen tehdy, když se ruka vejde do oktávy.
 
-V UI se dá kterákoli ruka ztlumit (noty zešednou). Typický postup cvičení je pravá ruka
-zvlášť, levá zvlášť, pak obě.
+## 5. Ukazatel polohy rukou
+
+Z prstokladu se pro každou ruku spočítá **pětiprstová poloha**: palec je na bílé klávese
+`bílá(nota) − (prst − 1)` u pravé ruky a `+ (prst − 1)` u levé (černá klávesa = bílá pod ní + ½).
+Na klaviatuře je lišta přes 5 bílých kláves s čísly prstů (pravá 1–5 zleva, levá 5–1). Když se
+do 1,2 s ruka přesouvá, nová poloha bliká čárkovaně pod lištou. Lišta se k nové poloze plynule
+posune. Přepínač „Ruce“ (R).
+
+V UI se dá kterákoli ruka hrát samostatně („Hraju já“). Ta druhá zní a je ztlumená. Typický postup
+cvičení je pravá ruka zvlášť, levá zvlášť, pak obě.

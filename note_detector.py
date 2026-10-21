@@ -146,6 +146,99 @@ def median_frame(cap: cv2.VideoCapture, samples: int = 30) -> Optional[np.ndarra
     return np.median(np.stack(frames), axis=0).astype(np.uint8)
 
 
+def _whites_from_separators(band: np.ndarray):
+    """Bile klavesy z tmavych delicich car v pasu bilych klaves -> (whites, W) nebo None."""
+    prof = np.convolve(band.mean(axis=0), np.ones(3) / 3, mode='same')
+    base = float(np.median(prof))
+    dip = (prof < base - max(20.0, base * 0.12)).astype(np.float32)
+    # Odhad sirky bile klavesy z autokorelace delicich car (7 az 90 klaves na sirku).
+    ac = np.correlate(dip - dip.mean(), dip - dip.mean(), mode='full')[len(dip) - 1:]
+    lo, hi = max(3, len(dip) // 90), max(4, len(dip) // 7)
+    if hi <= lo or dip.sum() == 0:
+        return None
+    W0 = lo + int(np.argmax(ac[lo:hi]))
+    # Necelociselna sirka (26.7 px) muze vyhrat nasobek periody (80 = 3 x 26.7) - zkusit 1/4, 1/3, 1/2.
+    for k in (4, 3, 2):
+        i = int(round(W0 / k))
+        if i - 1 >= lo and ac[i - 1: i + 2].max() > 0.6 * ac[W0]:
+            W0 = i - 1 + int(np.argmax(ac[i - 1: i + 2]))
+            break
+    seps = []
+    for a, b in _runs(dip > 0):
+        x = a + int(np.argmin(prof[a:b]))
+        if seps and x - seps[-1] < 0.6 * W0:
+            continue
+        seps.append(x)
+    if len(seps) < 3:
+        return None
+    W = float(np.median(np.diff(seps)))
+    # Doplnit chybejici hranice (napr. prekryte efektem) do pravidelne mrizky.
+    fixed = [seps[0]]
+    for x in seps[1:]:
+        gap = x - fixed[-1]
+        n = int(round(gap / W))
+        for k in range(1, n):
+            fixed.append(int(round(fixed[-1] + gap / n)))
+        if n >= 1:
+            fixed.append(x)
+    return _whites_from_bounds(fixed, W, band.shape[1])
+
+
+def _whites_from_blacks(dark_runs, width_px: int):
+    """
+    Bile klavesy z poloh cernych klaves: ve skupine (C# D#, F# G# A#) jsou cerne klavesy od sebe
+    o sirku bile klavesy W a lezi na hranicich bilych klaves -> mrizka x0 + k*W.
+    """
+    inner = [(a, b) for a, b in dark_runs if a > 0 and b < width_px]
+    if len(inner) < 5:
+        return None
+    bw = float(np.median([b - a for a, b in inner]))
+    centers = np.array([(a + b) / 2 for a, b in inner if 0.5 * bw <= b - a <= 1.6 * bw])
+    if len(centers) < 5:
+        return None
+    # 5 mezer mezi cernymi = 1 oktava = 7 bilych klaves (plati i kdyz jsou cerne posunute jako na
+    # skutecnem piane - mezery uvnitr skupiny pak nejsou presne W)
+    if len(centers) < 6:
+        return None
+    W = float(np.median(centers[5:] - centers[:-5])) / 7
+    if W < 4:
+        return None
+    # faze mrizky = kruhovy prumer poloh cernych klaves modulo W
+    ang = 2 * np.pi * (centers % W) / W
+    x0 = (np.arctan2(np.sin(ang).mean(), np.cos(ang).mean()) % (2 * np.pi)) / (2 * np.pi) * W
+    bounds = [int(round(x0 + k * W)) for k in range(0, int(width_px / W) + 2) if 0 < x0 + k * W < width_px]
+    return _whites_from_bounds(bounds, W, width_px)
+
+
+def _whites_from_bounds(bounds, W: float, width_px: int):
+    edges = [0] + list(bounds) + [width_px]
+    whites = [(a, b) for a, b in zip(edges, edges[1:]) if b - a >= 0.5 * W]
+    return (whites, W) if len(whites) >= 7 else None
+
+
+def _filter_blacks(dark_runs, W: float, width_px: int):
+    blacks = []
+    for a, b in dark_runs:
+        width = b - a
+        at_edge = a == 0 or b == width_px
+        if (0.3 * W <= width <= 0.95 * W) or (at_edge and 0.2 * W <= width <= 0.95 * W):
+            blacks.append((a, b))
+    return blacks
+
+
+def _black_pattern(whites, blacks, W: float):
+    """Ktera bila klavesa je C: hranice za bilou j ma cernou klavesu? -> (best_p, shoda 0-1)."""
+    bounds = [b for _, b in whites[:-1]]
+    centers = np.array([(a + b) / 2 for a, b in blacks]) if blacks else np.array([-1e9])
+    flags = [bool(np.min(np.abs(centers - x)) < 0.5 * W) for x in bounds]
+    best_p, best_score = 0, -1
+    for p in range(7):
+        score = sum(f == ((p + j) % 7 in BLACK_AFTER_WHITE) for j, f in enumerate(flags))
+        if score > best_score:
+            best_p, best_score = p, score
+    return best_p, best_score / max(1, len(flags))
+
+
 def detect_keyboard(frame: np.ndarray, config: Optional[DetectorConfig] = None) -> Optional[KeyboardLayout]:
     """
     Najde klavesnici ve snimku (idealne median, viz median_frame).
@@ -174,73 +267,41 @@ def detect_keyboard(frame: np.ndarray, config: Optional[DetectorConfig] = None) 
 
     # 2) Pas cernych klaves: od pasu bile nahoru, dokud radek obsahuje svetle i tmave.
     seg = gray[:, kx0:kx1]
-    by0 = wy0
-    while by0 > 0:
-        row = seg[by0 - 1]
+    by0, y, miss = wy0, wy0, 0
+    while y > 0 and miss <= 3:                 # tolerovat par prechodovych radku (vyhlazene hrany)
+        row = seg[y - 1]
+        y -= 1
         if (row > 150).mean() < 0.15 or (row < 100).mean() < 0.15:
-            break
-        by0 -= 1
+            miss += 1
+        else:
+            miss, by0 = 0, y
     black_h = wy0 - by0
     if black_h < 4:
         return None
 
-    # 3) Hranice bilych klaves = tmave cary v horni polovine pasu bile
-    #    (spodek pasu muze obsahovat popisky klaves).
+    width_px = kx1 - kx0
     band = gray[wy0 + 1: wy0 + max(3, (wy1 - wy0) // 2), kx0:kx1]
-    prof = np.convolve(band.mean(axis=0), np.ones(3) / 3, mode='same')
-    base = float(np.median(prof))
-    dip = (prof < base - max(20.0, base * 0.12)).astype(np.float32)
-    # Odhad sirky bile klavesy z autokorelace delicich car (7 az 90 klaves na sirku).
-    ac = np.correlate(dip - dip.mean(), dip - dip.mean(), mode='full')[len(dip) - 1:]
-    lo, hi = max(3, len(dip) // 90), max(4, len(dip) // 7)
-    if hi <= lo:
-        return None
-    W0 = lo + int(np.argmax(ac[lo:hi]))
-    # Kvuli strídani sirek 30/31 px muze vyhrat nasobek periody - zkusit polovinu.
-    while W0 // 2 >= lo and ac[W0 // 2 - 1: W0 // 2 + 2].max() > 0.6 * ac[W0]:
-        W0 = W0 // 2 - 1 + int(np.argmax(ac[W0 // 2 - 1: W0 // 2 + 2]))
-    seps = []
-    for a, b in _runs(dip > 0):
-        x = a + int(np.argmin(prof[a:b]))
-        if seps and x - seps[-1] < 0.6 * W0:
-            continue
-        seps.append(x)
-    if len(seps) < 3:
-        return None
-    W = float(np.median(np.diff(seps)))
-    # Doplnit chybejici hranice (napr. prekryte efektem) do pravidelne mrizky.
-    fixed = [seps[0]]
-    for x in seps[1:]:
-        gap = x - fixed[-1]
-        n = int(round(gap / W))
-        for k in range(1, n):
-            fixed.append(int(round(fixed[-1] + gap / n)))
-        if n >= 1:
-            fixed.append(x)
-    seps = fixed
-    edges = [0] + seps + [kx1 - kx0]
-    whites = [(a, b) for a, b in zip(edges, edges[1:]) if b - a >= 0.5 * W]
+    base = float(np.median(band))
 
-    # 4) Cerne klavesy ve stredu pasu cernych klaves.
+    # Cerne klavesy = tmave useky ve stredu pasu cernych klaves (vzdy kontrastni).
     mid = seg[by0 + black_h // 4: by0 + 3 * black_h // 4]
     is_dark = (mid < np.minimum(100, base * 0.5)).mean(axis=0) > 0.6
-    blacks = []
-    for a, b in _runs(is_dark):
-        width = b - a
-        at_edge = a == 0 or b == len(is_dark)
-        if (0.3 * W <= width <= 0.95 * W) or (at_edge and 0.2 * W <= width <= 0.95 * W):
-            blacks.append((a, b))
+    dark_runs = _runs(is_dark)
 
-    # 5) Vzor: hranice za bilou klavesou j ma cernou klavesu?
-    bounds = [b for _, b in whites[:-1]]
-    centers = np.array([(a + b) / 2 for a, b in blacks]) if blacks else np.array([-1e9])
-    flags = [bool(np.min(np.abs(centers - x)) < 0.5 * W) for x in bounds]
-    best_p, best_score = 0, -1
-    for p in range(7):
-        score = sum(f == ((p + j) % 7 in BLACK_AFTER_WHITE) for j, f in enumerate(flags))
-        if score > best_score:
-            best_p, best_score = p, score
-    pattern_score = best_score / max(1, len(flags))
+    # Dve metody pro bile klavesy, vybere se ta, ktere lip sedi vzor cernych klaves:
+    #  A) tmave delici cary mezi bilymi klavesami,
+    #  B) mrizka z poloh cernych klaves (kdyz jsou delici cary skoro neviditelne).
+    candidates = [c for c in (_whites_from_separators(band), _whites_from_blacks(dark_runs, width_px)) if c]
+    if not candidates:
+        return None
+    best = None
+    for whites, W in candidates:
+        blacks = _filter_blacks(dark_runs, W, len(is_dark))
+        best_p, pattern_score = _black_pattern(whites, blacks, W)
+        cand = (pattern_score, len(whites), whites, W, blacks, best_p)
+        if best is None or cand[:2] > best[:2]:
+            best = cand
+    pattern_score, _, whites, W, blacks, best_p = best
 
     # 6) Oktava: kalibrace uzivatelem, jinak stred klavesnice co nejbliz E4 (64).
     override = parse_note_name(config.start_note_override)
@@ -359,36 +420,143 @@ def _active_to_notes(active: np.ndarray, colors: np.ndarray, kb: KeyboardLayout,
             group_start = n.start_time
         else:
             n.start_time = group_start
-    return notes
+    return drop_bursts(notes)
+
+
+def drop_bursts(notes: List[DetectedNote], max_together: int = 10) -> List[DetectedNote]:
+    """
+    Hrac ma 10 prstu: vic nez 10 not se stejnym zacatkem neni hudba, ale efekt videa
+    (zaverecny zablesk, prechod, titulky pres klavesnici). Takove skupiny se zahodi.
+    """
+    from collections import Counter
+    counts = Counter(n.start_time for n in notes)
+    bursts = {t for t, c in counts.items() if c > max_together}
+    if bursts:
+        print(f"  Zahozeno {sum(counts[t] for t in bursts)} not ze {len(bursts)} zablesku (> {max_together} not naraz)")
+    return [n for n in notes if n.start_time not in bursts]
+
+
+def _lab(hsv) -> np.ndarray:
+    bgr = cv2.cvtColor(np.uint8([[hsv]]), cv2.COLOR_HSV2BGR)
+    return cv2.cvtColor(bgr, cv2.COLOR_BGR2LAB)[0, 0].astype(np.float32)
+
+
+def _two_colors(pts: np.ndarray):
+    """
+    2-means v barevnem prostoru. Vraci pole bool (prislusnost k 2. shluku) nebo None,
+    kdyz barvy netvori dva zretelne shluky (vzdalenost stredu >= 4x rozptyl uvnitr shluku).
+    """
+    c0 = np.median(pts, axis=0)
+    c1 = pts[int(np.argmax(((pts - c0) ** 2).sum(axis=1)))]
+    c0 = pts[int(np.argmax(((pts - c1) ** 2).sum(axis=1)))]
+    for _ in range(25):
+        lab = ((pts - c1) ** 2).sum(axis=1) < ((pts - c0) ** 2).sum(axis=1)
+        if lab.all() or (~lab).all():
+            return None
+        c0, c1 = pts[~lab].mean(axis=0), pts[lab].mean(axis=0)
+    between = float(np.linalg.norm(c0 - c1))
+    within = float(np.sqrt(np.mean(np.where(lab[:, None], pts - c1, pts - c0) ** 2) * 3))
+    if between < 6 or between < 4 * within or min(lab.mean(), 1 - lab.mean()) < 0.04:
+        return None
+    return lab
+
+
+def _hand_colors(pts: np.ndarray, pitch: np.ndarray):
+    """
+    Dva shluky barev = dve ruce. Ruce se lisi i rejstrikem, takze rozdeleni plati, jen kdyz se
+    prumerna vyska shluku lisi aspon o 5 pultonu. Jinak je mensi shluk zbytek efektu (zablesk,
+    stin) - pokud je maly (< 15 %), vyradi se a deli se znovu. Vraci (indexy, prislusnost) nebo None.
+    """
+    idx = np.arange(len(pts))
+    for _ in range(3):
+        if len(idx) < 4:
+            return None
+        lab = _two_colors(pts[idx])
+        if lab is None:
+            return None
+        if abs(pitch[idx][lab].mean() - pitch[idx][~lab].mean()) >= 5:
+            return idx, lab
+        small = lab if lab.mean() < 0.5 else ~lab
+        if small.mean() >= 0.15:
+            return None                                               # barvy nejsou ruce
+        idx = idx[~small]                                             # odriznout odlehle noty
+    return None
 
 
 def assign_hands(notes: List[DetectedNote]) -> bool:
     """
-    Rozdeli noty na levou/pravou ruku podle barvy (Synthesia barvi ruce ruzne).
-    Vraci False, pokud barvy netvori dva jasne shluky (pak hand zustane '').
+    Rozdeli noty na levou/pravou ruku podle barvy.
+    Videa barvi ruce ruzne, casto i zvlast bile a cerne klavesy (4 barvy, nekdy skoro stejne
+    odstiny), proto se shlukuje zvlast na bilych a zvlast na cernych klavesach, v barve Lab
+    a jen u sytych not (zablesky a sede noty by shluky pokazily). Shluk s nizsi prumernou
+    vyskou = leva ruka. Ostatni noty dostanou ruku podle not, ktere zni okolo.
+    Vraci False, pokud barvy ruce nerozlisuji (pak hand zustane '').
     """
     if len(notes) < 4:
         return False
-    hue = np.array([n.color_hsv[0] for n in notes], np.float32) * 2.0      # 0-360
-    ang = np.deg2rad(hue)
-    pts = np.stack([np.cos(ang), np.sin(ang)], axis=1)
-    # 2-means na kruznici, start v nejvzdalenejsich bodech
-    c0 = pts[0]
-    c1 = pts[int(np.argmax(((pts - c0) ** 2).sum(axis=1)))]
-    for _ in range(20):
-        lab = ((pts - c1) ** 2).sum(axis=1) < ((pts - c0) ** 2).sum(axis=1)
-        if lab.all() or (~lab).all():
-            return False
-        c0, c1 = pts[~lab].mean(axis=0), pts[lab].mean(axis=0)
-    sep = math.degrees(math.acos(float(np.clip(
-        np.dot(c0, c1) / (np.linalg.norm(c0) * np.linalg.norm(c1) + 1e-9), -1, 1))))
-    if sep < 25 or min(lab.mean(), 1 - lab.mean()) < 0.05:
+    raw = np.array([_lab(n.color_hsv) for n in notes])
+    labs = raw * np.float32([0.5, 1, 1])                                   # jas ma mensi vahu
+    saturated = np.array([n.color_hsv[1] >= 60 and n.color_hsv[2] >= 60 for n in notes])
+    black = np.array([n.midi_note % 12 in (1, 3, 6, 8, 10) for n in notes])
+    # rozsvicena bila klavesa je vzdy svetla; tmave "bile" noty jsou zbytky efektu
+    usable = saturated & (black | (raw[:, 0] >= 150))
+    done = np.zeros(len(notes), bool)
+    for is_black in (False, True):
+        idx = np.where(usable & (black == is_black))[0]
+        if len(idx) < 4:
+            continue
+        found = _hand_colors(labs[idx], np.array([notes[i].midi_note for i in idx], np.float32))
+        if found is None:
+            continue
+        sub, lab = found
+        idx = idx[sub]
+        pitch = np.array([notes[i].midi_note for i in idx])
+        right_is_1 = pitch[lab].mean() > pitch[~lab].mean()
+        for i, l in zip(idx, lab):
+            notes[i].hand = 'R' if l == right_is_1 else 'L'
+            done[i] = True
+    if not done.any():
         return False
-    pitch = np.array([n.midi_note for n in notes])
-    right_is_1 = pitch[lab].mean() > pitch[~lab].mean()
-    for n, l in zip(notes, lab):
-        n.hand = 'R' if l == right_is_1 else 'L'
-    return True
+
+    # zbytek (zablesky, typ klaves bez rozlisene barvy) podle okoli
+    assigned = [n for n, d in zip(notes, done) if d]
+    for n, d in zip(notes, done):
+        if d:
+            continue
+        ctx = [m for m in assigned if m.start_time < n.end_time + 1.0 and m.end_time > n.start_time - 1.0]
+        left = [m.midi_note for m in ctx if m.hand == 'L']
+        right = [m.midi_note for m in ctx if m.hand == 'R']
+        if left and right:
+            n.hand = 'L' if abs(n.midi_note - np.mean(left)) < abs(n.midi_note - np.mean(right)) else 'R'
+        elif left:
+            n.hand = 'L' if n.midi_note <= max(left) + 7 else 'R'
+        elif right:
+            n.hand = 'R' if n.midi_note >= min(right) - 7 else 'L'
+        else:
+            n.hand = 'L' if n.midi_note < 60 else 'R'
+    return any(n.hand == 'L' for n in notes) and any(n.hand == 'R' for n in notes)
+
+
+def fix_hand_spans(notes: List[DetectedNote], max_span: int = 12) -> int:
+    """
+    Jedna ruka neobsahne vic nez oktavu. Kdyz akord jedne ruky (stejny zacatek) presahne oktavu
+    a druha ruka v tu chvili nic nezacina, krajni tony prejdou do druhe ruky (typicky zaverecny
+    akord, kde video obarvi obe ruce stejne). Vraci pocet presunutych not.
+    """
+    from itertools import groupby
+    moved = 0
+    for _, group in groupby(sorted(notes, key=lambda n: n.start_time), key=lambda n: n.start_time):
+        group = list(group)
+        for hand, other in (('L', 'R'), ('R', 'L')):
+            own = sorted((n for n in group if n.hand == hand), key=lambda n: n.midi_note)
+            if any(n.hand == other for n in group) or len(own) < 2:
+                continue
+            while own and own[-1].midi_note - own[0].midi_note > max_span:
+                # nejvzdalenejsi ton od zbytku ruky prejde do druhe ruky
+                out = own.pop() if hand == 'L' else own.pop(0)
+                out.hand = other
+                moved += 1
+    return moved
 
 
 def detect_notes_from_video(video_path: str, config: Optional[DetectorConfig] = None,
@@ -446,7 +614,10 @@ def detect_notes_from_video(video_path: str, config: Optional[DetectorConfig] = 
 
     notes = _active_to_notes(lit, colors, kb, times, dt, config.min_note_duration)
     if config.split_hands and assign_hands(notes):
-        print(f"  Ruce podle barvy: L={sum(n.hand == 'L' for n in notes)}, R={sum(n.hand == 'R' for n in notes)}")
+        print(f"\n  Ruce podle barvy: L={sum(n.hand == 'L' for n in notes)}, R={sum(n.hand == 'R' for n in notes)}")
+        moved = fix_hand_spans(notes)
+        if moved:
+            print(f"  Prehozeno do druhe ruky (akord sirsi nez oktava): {moved}")
     if progress_callback:
         progress_callback(100.0, f"{len(notes)} not")
     print(f"  Celkem detekovano: {len(notes)} not")

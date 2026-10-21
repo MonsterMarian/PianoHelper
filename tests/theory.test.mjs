@@ -285,3 +285,18 @@ test('usek po taktech: prichyceni, posun, okraje skladby', async () => {
   assert.equal(end.to, bars.length - 1);                                   // na konci se nepohne dal
   assert.equal(loopBars(bars, 5, 5).to, 6);                                // aspon 1 takt
 });
+
+test('poloha rukou: palec podle prstokladu, ohlaseni presunu', async () => {
+  const { handWindows, whiteIndex, thumbOf } = await import('../web/js/hands.js');
+  const C4 = whiteIndex(60), F4 = whiteIndex(65);
+  assert.equal(thumbOf({ p: 64, f: 3 }, 'R'), C4);            // E3. prstem -> palec na C
+  assert.equal(thumbOf({ p: 66, f: 2 }, 'R'), whiteIndex(64)); // F# 2. prstem -> palec na E
+  assert.equal(thumbOf({ p: 48, f: 5 }, 'L'), whiteIndex(55)); // leva: C3 malickem -> palec na G3 (C D E F G)
+  // C dur nahoru pravou: 1 2 3 | 1 2 3 4 5 -> poloha C, pak F
+  const seq = [60, 62, 64, 65, 67, 69, 71, 72].map((p, i) => ({ p, s: i * 0.5, e: i * 0.5 + 0.45, h: 'R' }));
+  fingerHand(seq, 'R');
+  assert.equal(handWindows(seq, 0.2).R.cur, C4);
+  assert.equal(handWindows(seq, 1.2).R.next, F4);             // pred podkladem palce se ohlasi nova poloha
+  assert.equal(handWindows(seq, 1.7).R.cur, F4);
+  assert.equal(handWindows(seq, 0.2).L.cur, null);             // leva ruka nehraje
+});
