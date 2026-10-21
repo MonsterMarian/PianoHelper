@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { noteName, onsetGroups } from '../web/js/music.js';
-import { estimateGrid, matchChord, detectKey } from '../web/js/analysis.js';
+import { estimateGrid, matchChord, detectKey, chordTrack } from '../web/js/analysis.js';
 import { fingerHand } from '../web/js/fingering.js';
 import { splitHands, rebalanceHands } from '../web/js/hands.js';
 import { arrange } from '../web/js/arrange.js';
@@ -69,6 +69,45 @@ test('mrizka dob: tempo, metrum, prvni doba', () => {
   assert.equal(g2.meter, 4);
 });
 
+// zivy prednes: tempo zrychluje 84 -> 132 BPM a navic "dycha" (rubato +-4 %)
+function rubatoSong(bars = 20) {
+  const beats = [];
+  let t = 0.7;
+  for (let i = 0; i < bars * 4 + 1; i++) {
+    beats.push(t);
+    const bpm = 84 + (48 * i) / (bars * 4);
+    t += (60 / bpm) * (1 + 0.04 * Math.sin(i / 3));
+  }
+  const notes = [];
+  for (let i = 0; i < bars * 4; i++) {
+    const [a, b] = [beats[i], beats[i + 1]];
+    if (i % 4 === 0) notes.push({ p: 43 + ((i / 4) % 2) * 5, s: a, e: b * 0.98 + a * 0.02, h: 'L' });
+    else notes.push({ p: 55, s: a, e: a + (b - a) * 0.8, h: 'L' }, { p: 59, s: a, e: a + (b - a) * 0.8, h: 'L' });
+    notes.push({ p: 72 + (i % 5), s: a, e: a + (b - a) * 0.45, h: 'R' });
+    notes.push({ p: 74 + (i % 3), s: (a + b) / 2, e: (a + b) / 2 + (b - a) * 0.45, h: 'R' });
+  }
+  return { notes, beats: beats.slice(0, -1) };
+}
+
+test('mrizka dob sleduje zmenu tempa (rubato, zrychleni)', () => {
+  const { notes, beats } = rubatoSong();
+  const g = estimateGrid(notes);
+  assert.equal(g.meter, 4);
+  const err = beats.map((b) => Math.min(...g.beats.map((x) => Math.abs(x - b))));
+  const ok = err.filter((e) => e < 0.03).length / err.length;
+  assert.ok(ok >= 0.95, `doby trefene: ${(ok * 100).toFixed(0)} %`);
+  // prvni doby taktu = kazda 4. skutecna doba od zacatku
+  const downbeats = g.beats.filter((_, i) => i % g.meter === 0);
+  for (let bar = 0; bar < 20; bar++) assert.ok(downbeats.some((d) => Math.abs(d - beats[bar * 4]) < 0.03), `takt ${bar}`);
+});
+
+test('uroven 2 pri zmene tempa: bas sedi na dobach, kazdy takt ma bas', () => {
+  const { notes, beats } = rubatoSong();
+  const bass = arrange(notes, 2).filter((n) => n.h === 'L');
+  for (const n of bass) assert.ok(beats.some((b) => Math.abs(b - n.s) < 0.04), `bas mimo dobu @${n.s.toFixed(2)}`);
+  for (let bar = 0; bar < 20; bar++) assert.ok(bass.some((n) => Math.abs(n.s - beats[bar * 4]) < 0.04), `takt ${bar} bez basu`);
+});
+
 test('akordy a tonina', () => {
   const prof = (pcs) => { const p = new Array(12).fill(0); pcs.forEach((x) => { p[x] += 1; }); return p; };
   assert.equal(matchChord(prof([0, 4, 7])).name, 'C');
@@ -77,6 +116,22 @@ test('akordy a tonina', () => {
   assert.equal(matchChord(prof([4, 7, 11]), 4).name, 'Em');
   const scale = [60, 62, 64, 65, 67, 69, 71, 72, 67, 64, 60, 55, 60].map((p, i) => ({ p, s: i, e: i + (p === 60 ? 2 : 1) }));
   assert.equal(detectKey(scale).name, 'C dur');
+});
+
+test('akordy se nemeni kvuli pruchodnym tonum melodie (Oda na radost)', async () => {
+  const fs = await import('node:fs');
+  const song = JSON.parse(fs.readFileSync(new URL('../web/songs/oda-na-radost.json', import.meta.url), 'utf8'));
+  const g = estimateGrid(song.notes);
+  const chords = chordTrack(song.notes, g, 39);
+  // prvni 4 takty: C | G | C | G (bas C3, G2 celymi notami, melodie E E F G | G F E D | C C D E | E. D D)
+  const bar = g.beat * 4;
+  const at = (t) => chords.find((c) => c.s <= t + 1e-6 && c.e > t + 1e-6)?.root;
+  assert.deepEqual([0, 1, 2, 3].map((b) => at(b * bar)), [0, 7, 0, 7]);
+  for (let b = 0; b < 4; b++) for (const k of [1, 2, 3]) assert.equal(at(b * bar + k * g.beat), [0, 7, 0, 7][b], `takt ${b + 1}, doba ${k + 1}`);
+  // uroven 2: v kazdem z prvnich 4 taktu jeden bas, drzi cely takt
+  const bass = arrange(song.notes, 2, g).filter((n) => n.h === 'L' && n.s < 4 * bar - 0.1);
+  assert.equal(bass.length, 4);
+  for (const n of bass) assert.ok(n.e - n.s > bar * 0.9, `bas ${n.p} drzi ${(n.e - n.s).toFixed(2)} s`);
 });
 
 test('rozdeleni rukou bez barev', () => {
@@ -135,6 +190,24 @@ test('uroven 2 a 3: leva ruka zjednodusena, pod melodii', () => {
   }
 });
 
+test('uroven 3: vedeni hlasu - horni ton leve ruky skace malo', () => {
+  // C - Am - F - G - C, kazdy akord 1 takt, melodie vysoko
+  const beat = 0.5, notes = [];
+  const prog = [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50], [48, 52, 55]];
+  prog.forEach((c, b) => {
+    c.forEach((p) => notes.push({ p, s: b * 4 * beat, e: (b + 1) * 4 * beat - 0.05, h: 'L' }));
+    for (let k = 0; k < 4; k++) notes.push({ p: 76 + (k % 2), s: (b * 4 + k) * beat, e: (b * 4 + k + 0.9) * beat, h: 'R' });
+  });
+  const out = arrange(notes, 3);
+  const firsts = onsetGroups(out.filter((n) => n.h === 'L')).map((g) => g.notes.map((n) => n.p).sort((a, b) => a - b));
+  const uppers = firsts.filter((g) => g.length === 2).map((g) => g[1]);
+  assert.ok(uppers.length >= 5);
+  const moves = uppers.slice(1).map((u, i) => Math.abs(u - uppers[i]));
+  assert.ok(Math.max(...moves) <= 4, `skoky horniho hlasu: ${moves}`);
+  // horni ton je vzdy ton akordu a ruka se vejde do oktavy
+  for (const g of firsts.filter((x) => x.length === 2)) assert.ok(g[1] - g[0] >= 3 && g[1] - g[0] <= 12, `${g}`);
+});
+
 test('uroven 4 = original, uroven 5 = original + pridane noty', () => {
   const { notes } = song();
   const four = arrange(notes, 4);
@@ -150,6 +223,31 @@ test('uroven 4 = original, uroven 5 = original + pridane noty', () => {
     for (const h of ['L', 'R']) {
       const ps = sounding(five, h, g.t).map((n) => n.p);
       if (ps.length) assert.ok(Math.max(...ps) - Math.min(...ps) <= 12, `rozpeti ${h} @${g.t}: ${ps}`);
+    }
+  }
+});
+
+test('MusicXML: kazdy takt ma spravnou delku, zadna nota se neztrati', async () => {
+  const { toMusicXML } = await import('../web/js/musicxml.js');
+  const fs = await import('node:fs');
+  const ode = JSON.parse(fs.readFileSync(new URL('../web/songs/oda-na-radost.json', import.meta.url), 'utf8')).notes;
+  for (const [name, notes] of [['oda', ode], ['rubato', rubatoSong().notes]]) {
+    const grid = estimateGrid(notes);
+    for (const level of [1, 2, 3, 4, 5]) {
+      const arranged = arrange(notes, level, grid);
+      const xml = toMusicXML(arranged, grid, name);
+      const measures = xml.split('<measure ').slice(1);
+      assert.ok(measures.length > 0);
+      for (const [i, m] of measures.entries()) {
+        for (const staff of [1, 2]) {
+          const durs = [...m.matchAll(/<note>(<chord\/>)?.*?<duration>(\d+)<\/duration>.*?<staff>(\d)<\/staff>/g)]
+            .filter((x) => !x[1] && Number(x[3]) === staff).map((x) => Number(x[2]));
+          assert.equal(durs.reduce((a, b) => a + b, 0), grid.meter * 4, `${name} L${level} takt ${i + 1} osnova ${staff}`);
+        }
+      }
+      // hlavicky not bez navazanych ligatur = pocet not
+      const heads = [...xml.matchAll(/<note>(?:(?!<\/note>).)*<pitch>(?:(?!<\/note>).)*<\/note>/g)].filter((x) => !x[0].includes('<tie type="stop"/>'));
+      assert.equal(heads.length, arranged.length, `${name} L${level}`);
     }
   }
 });

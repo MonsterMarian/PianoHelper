@@ -31,6 +31,7 @@ python main.py --local video.mp4 --start-note E2      # nejlevější bílá kl�
 | Nácvik po rukou | vypni zvuk pravé/levé ruky; tu ruku hraješ sám (noty zešednou) |
 | Tempo 25–150 %, rychlost pádu, hlasitost | posuvníky |
 | Akord, tónina, tempo, takt | nahoře v rohu |
+| **Notový zápis** s prstokladem | „Stáhnout noty (MusicXML)“ → otevři v MuseScore a vytiskni |
 
 Přehrávač je statický web (HTML + JS moduly bez buildu). Klavír zní ze vzorků
 [Salamander Grand Piano](https://tonejs.github.io/audio/salamander/) (CC-BY), takže je potřeba
@@ -41,7 +42,8 @@ internet. Bez `server.py` funguje také (např. GitHub Pages), jen bez převodu 
 1. **Detekce z videa** (`note_detector.py`): medián snímků → klávesnice → vzor černých kláves
    určí názvy → rozsvícené klávesy po snímcích = noty → barva = ruka. Oktáva se ověří podle
    zvuku (`audio_octave.py`). Podrobně: [teorie/05-detekce-videa.md](teorie/05-detekce-videa.md).
-2. **Hudební analýza** (`web/js/analysis.js`): tempo, takt, akordy, tónina.
+2. **Hudební analýza** (`web/js/analysis.js`): sledování dob (i proměnné tempo), takt, akordy
+   (Viterbi), tónina.
 3. **Obtížnosti** (`web/js/arrange.js`): melodie, bas, kvinty, originál, oktávy a rozklady.
 4. **Prstoklad** (`web/js/fingering.js`): dynamické programování nad ergonomickými pravidly
    (Parncutt 1997, Jacobs 2001).
@@ -94,7 +96,8 @@ tests/                testy
 
 - Video musí ukazovat klávesnici, která se při hraní barví (Synthesia a většina tutoriálů).
   Videa reálného klavíru zvládne jen `--audio`, a to méně přesně.
-- Jedna mřížka tempa na skladbu: přesné pro videa vyrobená z MIDI, ne pro volné tempo.
+- Tempo se sleduje i při zrychlování/zpomalování, ale náhlé zlomy (fermata) se chvíli
+  hledají znovu.
 - Převedené skladby jsou jen pro osobní nácvik; do repozitáře se necommitují (`.gitignore`).
 
 ## Licence

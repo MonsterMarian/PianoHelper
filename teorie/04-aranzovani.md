@@ -10,7 +10,7 @@ pohybuje. Melodie (to, co si člověk zpívá) ale zůstává.**
 |---|---|---|---|
 | 1 Melodie | jen melodie | nic | první seznámení, nácvik melodie |
 | 2 Snadné | melodie | 1 basový tón na takt (a při změně akordu delší než 2 doby) | začátečník, obě ruce |
-| 3 Střední | melodie | základ + kvinta na každou půlku taktu (ve 3/4 na takt) | mírně pokročilý |
+| 3 Střední | melodie | bas + tón akordu s vedením hlasů na každou půlku taktu (ve 3/4 na takt) | mírně pokročilý |
 | 4 Originál | jak ve videu | jak ve videu | — |
 | 5 Pokročilé | + oktávy pod dlouhými tóny melodie | držené basy → rozložené akordy v osminách | pokročilý |
 
@@ -31,16 +31,29 @@ pohybuje. Melodie (to, co si člověk zpívá) ale zůstává.**
 Podle mřížky z [01-analyza.md](01-analyza.md) a akordů:
 
 - sloty = začátky taktů (a začátek akordu, pokud trvá ≥ 2 doby; kratší změna uprostřed taktu
-  se vynechá),
+  se vynechá). Doby jsou časy ze sledování dob, takže bas sedí i při změně tempa,
 - tón = **nejnižší původní tón levé ruky**, pokud patří do akordu (zachová se basová linka
   i obraty), jinak **základ akordu** v rozsahu C2–B3,
 - strop = nejnižší tón melodie v daném úseku − 3 půltóny, aby se ruce nesrazily.
 
-### Kvinty (úroveň 3)
+### Dvojhlas s vedením hlasů (úroveň 3)
 
-Jako úroveň 2, ale slot je půlka taktu a k basu přibude kvinta (+7 půltónů), pokud nepřekročí
-strop. Kvinta (bez tercie) zní dobře u dur i moll a v ruce je to pořád stejný tvar
-(prsty 5 + 1 nebo 5 + 2), což je pro začátečníka ideální.
+Jako úroveň 2, ale slot je půlka taktu a k basu přibude **jeden tón akordu** 3–12 půltónů nad
+basem (a pod melodií):
+
+- první akord: kvinta (stejný tvar ruky u dur i moll, prsty 5 + 1 nebo 5 + 2),
+- další akordy: tón akordu **nejblíž předchozímu hornímu tónu** (vedení hlasů,
+  „nejkratší cesta“). Ruka se tak skoro nehýbe; kvinta má při shodě malou přednost,
+- bas, pokud se nebere z originálu, se posadí do oktávy nejblíž předchozímu basu.
+
+Příklad C – Am – F – G – C: horní hlas G – A – A – G – G místo kvint G – E – C – D – G.
+Skoky max. 2 půltóny místo 5.
+
+### Držení basu (úrovně 2 a 3)
+
+Každý tón levé ruky drží až do dalšího tónu levé ruky (nejdéle takt, nejdéle do konce
+skladby). Přeskočená krátká změna akordu uprostřed taktu tak nenechá díru: v notách jsou celé
+noty, žádné pomlky.
 
 ### Ozdoby (úroveň 5)
 
@@ -69,6 +82,9 @@ strop. Kvinta (bez tercie) zní dobře u dur i moll a v ruce je to pořád stejn
 - úroveň 1 = přesně melodie, vždy jedna nota naráz, všechny noty mají prst,
 - úroveň 2: levá ruka vždy nejvýš 1 nota, úroveň 3 nejvýš 2; levá ruka je celá pod melodií;
   pro akord C dur hraje C (úroveň 2) a C + G (úroveň 3),
+- úroveň 3: v C – Am – F – G – C skáče horní hlas levé ruky nejvýš o 4 půltóny,
+- Óda na radost, úroveň 2: v každém taktu jeden bas, drží celý takt,
+- zrychlující skladba s rubatem: každý bas sedí na skutečné době a každý takt má bas,
 - úroveň 4 = originál beze změny,
 - úroveň 5 obsahuje všechny noty pravé ruky originálu, přidané noty jsou označené
   a žádná ruka nepřesáhne oktávu.
@@ -79,6 +95,5 @@ originálu, úroveň 2 přidá ~1 tón na takt. Výpočet všech úrovní trvá 
 ## Plán
 
 - Vícehlasá analýza místo skyline (melodie v levé ruce nebo uprostřed).
-- Úroveň 3 s obraty akordů a vedením hlasů (minimální pohyb ruky).
 - Volitelná transpozice do „bílé“ tóniny (C dur / a moll) pro úplné začátečníky.
 - Zjednodušení rytmu (synkopy na dobu) pro úroveň 1.

@@ -10,6 +10,7 @@ různé obtížnosti) a 4 (rady, kterým prstem hrát). Kód je ve `web/js/`, te
 | [03-ruce.md](03-ruce.md) | rozdělení not mezi ruce, přehazování rukou | `hands.js` |
 | [04-aranzovani.md](04-aranzovani.md) | jak vznikají úrovně 1–5 | `arrange.js` |
 | [05-detekce-videa.md](05-detekce-videa.md) | jak se noty čtou z videa | `note_detector.py`, `audio_octave.py` |
+| [06-notovy-zapis.md](06-notovy-zapis.md) | export do notového zápisu (MusicXML) s prstokladem | `musicxml.js` |
 
 ## Jak to do sebe zapadá
 
@@ -17,7 +18,7 @@ různé obtížnosti) a 4 (rady, kterým prstem hrát). Kód je ve `web/js/`, te
 video ──► noty (výška, začátek, konec, ruka podle barvy)            note_detector.py
             │
             ▼
-      analýza: mřížka dob, takt, akordy, tónina                    analysis.js
+      analýza: sledování dob (i proměnné tempo), takt, akordy, tónina analysis.js
             │
             ▼
       úroveň 1–5: melodie / bas / kvinty / originál / ozdoby        arrange.js
@@ -30,6 +31,7 @@ video ──► noty (výška, začátek, konec, ruka podle barvy)            no
             │
             ▼
       přehrávač: padající noty, písmena, prsty, smyčka, tempo        render.js, audio.js
+      notový zápis: MusicXML s prstokladem                          musicxml.js
 ```
 
 Všechno po analýze běží v prohlížeči, takže funguje i pro libovolný `.mid` soubor, nejen pro
@@ -39,29 +41,33 @@ převedená videa.
 
 - [x] Detekce klávesnice podle vzoru černých kláves; oktáva podle zvuku. Test: syntetické video
       se známými notami + 2 reálná videa různého stylu.
-- [x] Mřížka dob: perioda, fáze, takt 3/4 nebo 4/4. Testy: syntetické 3/4 a 4/4 s chvěním ±15 ms;
-      na reálných videích drift pod 5 ms za 5 minut.
-- [x] Akordy po dobách (8 typů) a tónina (Krumhansl–Kessler).
+- [x] **Sledování dob s proměnným tempem** (dopředu + zpětný průchod), takt 3/4 / 4/4 podle
+      indexů dob. Testy: 3/4 a 4/4 s chvěním ±15 ms, zrychlení 84 → 132 BPM s rubatem.
+- [x] **Akordy přes Viterbi** s cenou změny podle metrické váhy doby; melodie váží méně, bas
+      preferuje základ. Test: Óda na radost C | G | C | G i přes průchodné tóny.
 - [x] Úrovně 1–5 s testy invariant (úroveň 1 hraje jednu notu naráz, levá ruka je pod melodií,
-      rozpětí ruky ≤ oktáva…).
+      rozpětí ruky ≤ oktáva…). **Úroveň 3 s vedením hlasů** (horní hlas skáče ≤ 4 půltóny).
 - [x] Prstoklad: učebnicové výsledky pro stupnice C, G, D a F dur v obou rukou, dvě oktávy C dur,
       kvintakordy, pětiprstovou polohu a Ódu na radost.
 - [x] Přehození noty do druhé ruky, když by akord přesáhl oktávu (a označení v UI).
+- [x] **Export notového zápisu** (MusicXML) s prstokladem. 15 souborů ověřeno přes music21:
+      délky taktů, výšky a počty not sedí.
+- [x] Zvuk ověřen měřením signálu na výstupu přehrávače (headless Chrome, 30/30 vzorků).
 
 ## Plán dalších zlepšení (seřazeno podle přínosu)
 
-1. **Proměnné tempo.** Mřížka je teď jedna pro celou skladbu, což stačí pro videa vyrobená
-   z MIDI (Synthesia). U živě nahraných videí by bylo potřeba sledovat doby lokálně
-   (např. dynamické programování podle Ellise 2007).
-2. **Hlasy místo „nejvyšší noty“.** Melodie je teď nejvyšší tón pravé ruky. Lepší je rozdělit
-   pravou ruku na hlasy (Chew & Wu 2004) a vybrat ten nejzpěvnější.
-3. **Obraty akordů v levé ruce (úroveň 3).** Teď hraje základ + kvintu. Plynulejší je vést
-   hlasy nejkratší cestou (voice leading) a volit obraty.
-4. **Prstoklad z dat.** Pravidla dávají učebnicové výsledky na stupnicích a jednoduchých
-   melodiích. U rychlých pasáží by pomohl statistický model natrénovaný na datasetu PIG
-   (Nakamura et al. 2020), kde jsou prstoklady od pianistů.
-5. **Kvantizace pro notový zápis.** Mřížka dob je hotová, takže lze noty zaokrouhlit a vyrobit
-   MusicXML pro MuseScore.
+1. **Hlasy místo „nejvyšší noty“.** Melodie je teď nejvyšší tón pravé ruky. U obou
+   testovaných videí to stačí (pravá ruka hraje skoro jednohlasně). Pro skladby, kde je
+   melodie uprostřed nebo v levé ruce, by bylo potřeba rozdělit noty na hlasy
+   (Chew & Wu 2004) a vybrat ten nejzpěvnější.
+2. **Prstoklad z dat.** Pravidla dávají učebnicové výsledky na stupnicích a jednoduchých
+   melodiích. U rychlých pasáží by pomohl statistický model z datasetu PIG
+   (Nakamura et al. 2020). Dataset je ke stažení po odsouhlasení licence, to musí udělat
+   uživatel.
+3. **Druhý hlas a trioly v notovém zápisu** (viz 06-notovy-zapis.md).
+4. **Režim „čekej na mě“**: přehrávač počká, až zahraješ správné klávesy (Web MIDI nebo
+   klávesnice počítače). Přesně takhle učí Synthesia.
+5. Volitelná transpozice do „bílé“ tóniny (C dur / a moll) pro úplné začátečníky.
 
 ## Zdroje
 

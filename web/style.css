@@ -99,6 +99,7 @@ legend { font-weight: 700; margin-bottom: 8px; padding: 0; }
 .swatch { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 .swatch.rh { background: var(--rh); }
 .swatch.lh { background: var(--lh); }
+.export { width: 100%; margin-top: 8px; }
 .help summary { cursor: pointer; font-weight: 600; }
 
 @media (max-width: 860px) {

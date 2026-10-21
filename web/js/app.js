@@ -3,9 +3,11 @@ import { estimateGrid, chordTrack, detectKey } from './analysis.js';
 import { Player } from './audio.js';
 import { draw, drawTimeline, layoutKeys } from './render.js';
 import { songEnd } from './music.js';
+import { toMusicXML } from './musicxml.js';
 
 const $ = (id) => document.getElementById(id);
 const player = new Player();
+window.pianoHelper = { player };          // pro ladeni v konzoli a testy
 
 // Nastaveni uzivatele (jen pohodli; bez localStorage vse funguje s vychozimi hodnotami)
 const prefs = (() => { try { return JSON.parse(localStorage.getItem('pianohelper') || '{}'); } catch { return {}; } })();
@@ -49,7 +51,7 @@ function setSong(title, notes) {
   state.chords = chordTrack(state.base, state.grid, songEnd(state.base));
   state.cache.clear();
   state.loop = null; state.loopOn = false;
-  const key = detectKey(state.base);
+  const key = state.key = detectKey(state.base);
   $('song-info').textContent = `${key.name} · ${Math.round(60 / state.grid.beat)} BPM · ${state.grid.meter}/4`;
   message('');
   applyLevel();
@@ -130,6 +132,17 @@ for (const l of LEVELS) {
   b.addEventListener('click', () => setLevel(l.id));
   $('levels').append(b);
 }
+$('export').addEventListener('click', () => {
+  if (!state.notes.length) return;
+  const level = LEVELS.find((l) => l.id === state.level).name;
+  const xml = toMusicXML(state.notes, state.grid, `${state.title} (${level})`, state.key);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([xml], { type: 'application/vnd.recordare.musicxml+xml' }));
+  a.download = `${state.title.replace(/[\\/:*?"<>|]+/g, '').slice(0, 80)} - ${level}.musicxml`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
 function setLevel(id) { state.level = id; prefs.level = id; savePrefs(); applyLevel(); }
 
 function togglePlay() {

@@ -2,18 +2,18 @@
 //
 // 1 Melodie     - jen melodie pravou rukou (bez ozdob)
 // 2 Snadne      - melodie + levou rukou jeden basovy ton na kazdy takt / zmenu akordu
-// 3 Stredni     - melodie + leva ruka kvinta (zaklad + kvinta) na kazdou pulku taktu
+// 3 Stredni     - melodie + leva ruka bas + ton akordu (vedeni hlasu) na kazdou pulku taktu
 // 4 Original    - presne podle videa
 // 5 Pokrocile   - original + oktavy v melodii + leva ruka rozlozene akordy
 import { onsetGroups, clone, songEnd } from './music.js';
-import { estimateGrid, chordTrack } from './analysis.js';
+import { estimateGrid, chordTrack, beatTimes } from './analysis.js';
 import { splitHands, rebalanceHands, MAX_SPAN } from './hands.js';
 import { fingerAll } from './fingering.js';
 
 export const LEVELS = [
   { id: 1, name: 'Melodie', hint: 'Jen melodie pravou rukou' },
   { id: 2, name: 'Snadné', hint: 'Melodie + basový tón na takt' },
-  { id: 3, name: 'Střední', hint: 'Melodie + kvinty v levé ruce' },
+  { id: 3, name: 'Střední', hint: 'Melodie + dvojhlas v levé ruce' },
   { id: 4, name: 'Originál', hint: 'Přesně podle videa' },
   { id: 5, name: 'Pokročilé', hint: 'Oktávy v melodii + rozložené akordy' },
 ];
@@ -51,37 +51,73 @@ function placeInRange(pc, lo, hi, target) {
   return best;
 }
 
-// Basovy ton pro okno: nejnizsi puvodni nota leve ruky, pokud patri do akordu, jinak zaklad akordu.
-function bassFor(notes, chord, a, b, ceiling) {
+// Basovy ton pro okno: nejnizsi puvodni nota leve ruky, pokud patri do akordu, jinak zaklad
+// akordu v oktave nejbliz predchozimu basu (ruka se zbytecne nepresouva).
+function bassFor(notes, chord, a, b, ceiling, prev) {
   const low = notes.filter((n) => n.h === 'L' && n.s < b && n.e > a).sort((x, y) => x.p - y.p)[0];
   if (low && chord.tones.includes(low.p % 12) && low.p <= ceiling) return low.p;
-  return placeInRange(chord.root, 36, Math.min(ceiling, 59), low ? low.p : 48);
+  return placeInRange(chord.root, 36, Math.min(ceiling, 59), prev ?? (low ? low.p : 48));
+}
+
+// Horni ton leve ruky (uroven 3): ton akordu 3-12 pultonu nad basem, co nejbliz predchozimu
+// hornimu tonu (vedeni hlasu); bez predchoziho kvinta. Kvinta ma malou prednost.
+function upperFor(chord, bass, ceiling, prev) {
+  let best = null;
+  for (let p = bass + 3; p <= Math.min(bass + 12, ceiling); p++) {
+    if (!chord.tones.includes(p % 12)) continue;
+    const isFifth = (p - chord.root + 120) % 12 === 7;
+    const cost = (prev === null ? 0 : Math.abs(p - prev)) - (isFifth ? 0.5 : 0) + (prev === null && !isFifth ? 5 : 0);
+    if (!best || cost < best.cost) best = { p, cost };
+  }
+  return best ? best.p : null;
 }
 
 function leftHandSimple(notes, melody, grid, end, { fifths, perBar }) {
   const chords = chordTrack(notes, grid, end);
+  const beats = beatTimes(grid, end);
   const out = [];
   // Snadne: ton na kazdy takt; Stredni: na kazdou pulku taktu (ve 3/4 na takt). Plus kazda zmena akordu.
-  const unit = perBar || grid.meter % 2 ? grid.beat * grid.meter : grid.beat * 2;
+  // Doby jsou pole casu (tempo se muze menit), beats[0] je prvni doba taktu.
+  const unit = perBar || grid.meter % 2 ? grid.meter : 2;
+  let prevBass = null, prevUpper = null;
   for (const ch of chords) {
-    const slots = [ch.s];
-    for (let t = grid.downbeat + Math.ceil((ch.s - grid.downbeat) / unit + 1e-6) * unit; t < ch.e - 1e-6; t += unit) slots.push(t);
-    for (let i = 0; i < slots.length; i++) {
-      const a = slots[i], b = slots[i + 1] ?? ch.e;
-      const onGrid = Math.abs((a - grid.downbeat) / unit - Math.round((a - grid.downbeat) / unit)) < 0.05;
+    const ei = beats.indexOf(ch.e);
+    const slots = [ch.si];
+    for (let i = ch.si + 1; i < ei; i++) if (i % unit === 0) slots.push(i);
+    for (let k = 0; k < slots.length; k++) {
+      const a = beats[slots[k]], b = k + 1 < slots.length ? beats[slots[k + 1]] : ch.e;
       // kratka zmena akordu uprostred taktu je pro zacatecnika zbytecna
-      if (perBar && i === 0 && !onGrid && ch.e - ch.s < grid.beat * 2 - 1e-6) continue;
+      if (perBar && k === 0 && ch.si % unit !== 0 && ei - ch.si < 2) continue;
       // leva ruka nesmi prekryt melodii: strop = nejnizsi melodicky ton v okne - 3
       const mel = melody.filter((m) => m.s < b && m.e > a).map((m) => m.p);
       const ceiling = (mel.length ? Math.min(...mel) : 72) - 3;
-      const bass = bassFor(notes, ch, a, b, ceiling - (fifths ? 7 : 0));
+      const bass = bassFor(notes, ch, a, b, ceiling - (fifths ? 3 : 0), prevBass);
       if (bass === null) continue;
       const dur = Math.max(0.1, b - a - 0.02);
       out.push({ p: bass, s: a, e: a + dur, h: 'L' });
-      if (fifths && bass + 7 <= ceiling) out.push({ p: bass + 7, s: a, e: a + dur, h: 'L' });
+      prevBass = bass;
+      if (!fifths) continue;
+      const upper = upperFor(ch, bass, ceiling, prevUpper);
+      if (upper !== null) { out.push({ p: upper, s: a, e: a + dur, h: 'L' }); prevUpper = upper; }
     }
   }
+  // preskocena kratka zmena akordu nesmi nechat diru: ton drzi do dalsiho basu, nejdele takt
+  const bar = grid.beat * grid.meter;
+  const starts = [...new Set(out.map((n) => n.s))].sort((x, y) => x - y);
+  for (const n of out) {
+    const next = starts.find((t) => t > n.s + 1e-6) ?? Infinity;
+    n.e = Math.max(n.e, Math.min(next - 0.02, n.s + bar, end));
+  }
   return out;
+}
+
+// Osminy (puldoby) v useku [a, b): doby + stredy mezi nimi; zacina vzdy v a.
+function eighthsIn(beats, a, b) {
+  const pts = [];
+  for (let i = 0; i + 1 < beats.length; i++) pts.push(beats[i], (beats[i] + beats[i + 1]) / 2);
+  const step = (beats[1] - beats[0]) / 2;
+  const out = pts.filter((t) => t > a + 0.25 * step && t < b - 0.5 * step);
+  return [a, ...out];
 }
 
 // Pokrocile: oktavove zdvojeni melodie na dlouhych tonech + rozlozene akordy v leve ruce.
@@ -100,7 +136,7 @@ function advanced(notes, grid, end) {
 
   // drzene noty leve ruky (>= 2 doby) -> rozlozeny akord v osminach: zaklad, kvinta, oktava, kvinta
   const chords = chordTrack(notes, grid, end);
-  const step = grid.beat / 2;
+  const beats = beatTimes(grid, end);
   const result = [];
   for (const n of out) {
     if (n.h !== 'L' || n.e - n.s < grid.beat * 2 || n.added) { result.push(n); continue; }
@@ -112,13 +148,14 @@ function advanced(notes, grid, end) {
     const fifthPc = (ch.root + 7) % 12;
     const fifth = placeInRange(fifthPc, n.p + 1, n.p + 11, n.p + 7);
     const pattern = [n.p, fifth, n.p + 12, fifth].map((p) => (p !== null && p < top - 2 ? p : null));
-    let k = 0;
-    for (let t = n.s; t < n.e - step / 2; t += step, k++) {
+    const times = eighthsIn(beats, n.s, n.e);
+    times.forEach((t, k) => {
       const p = pattern[k % 4];
-      if (p === null) continue;
-      if (k > 0 && others.some((o) => o.p === p && o.s < t + step && o.e > t)) continue;
-      result.push({ p, s: t, e: Math.min(n.e, t + step * 0.95), h: 'L', added: k > 0 });
-    }
+      const next = times[k + 1] ?? n.e;
+      if (p === null) return;
+      if (k > 0 && others.some((o) => o.p === p && o.s < next && o.e > t)) return;
+      result.push({ p, s: t, e: t + (next - t) * 0.95, h: 'L', added: k > 0 });
+    });
   }
   return result;
 }
