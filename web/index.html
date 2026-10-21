@@ -42,6 +42,18 @@
       <div id="chord" class="chord" aria-hidden="true"></div>
       <div id="view-panel" class="view-panel" hidden>
         <span class="eyebrow">Pohled</span>
+        <div class="range-ctrl field">
+          <label class="label" for="range">Klaviatura</label>
+          <select id="range" title="Kolik kláves je vidět">
+            <option value="88">88 · celé piano</option>
+            <option value="76">76 kláves</option>
+            <option value="61">61 kláves</option>
+            <option value="49">49 kláves</option>
+            <option value="auto">Podle skladby</option>
+            <option value="custom">Vlastní výřez</option>
+          </select>
+          <canvas id="keymap" class="keymap-mini" aria-label="Výřez klaviatury: táhni pro posun, za okraj pro velikost"></canvas>
+        </div>
         <label class="field"><span class="label">Šířka piana <output id="width-out"></output></span>
           <input id="piano-width" type="range" min="35" max="100" step="1" value="100"></label>
         <label class="field"><span class="label">Délka not <output id="pps-out"></output></span>
@@ -92,19 +104,18 @@
             <option value="custom" hidden>vlastní</option>
           </select>
         </div>
-        <canvas id="timeline" class="timeline" aria-label="Časová osa: klik = skok, tažení = výběr úseku"></canvas>
-        <div class="range-ctrl">
-          <label class="label" for="range">Klaviatura</label>
-          <select id="range" title="Kolik kláves je vidět">
-            <option value="88">88 · celé piano</option>
-            <option value="76">76 kláves</option>
-            <option value="61">61 kláves</option>
-            <option value="49">49 kláves</option>
-            <option value="auto">Podle skladby</option>
-            <option value="custom">Vlastní výřez</option>
-          </select>
-          <canvas id="keymap" class="keymap-mini" aria-label="Výřez klaviatury: táhni pro posun, za okraj pro velikost"></canvas>
+        <div class="timeline-wrap">
+          <canvas id="overview" class="overview" aria-label="Celá skladba: klik = skok, táhni okno pro posun detailu"></canvas>
+          <canvas id="timeline" class="timeline" aria-label="Takty: klik = skok, tažení = úsek, kolečko = přiblížení"></canvas>
         </div>
+        <div class="tl-tools" role="group" aria-label="Časová osa">
+          <button id="tl-lock" class="key-btn square" aria-pressed="true" title="Sledovat přehrávání (osa jede s hudbou)" aria-label="Sledovat přehrávání">
+            <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path class="shackle" d="M8 10.5V7.5a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </button>
+          <button id="tl-out" class="key-btn square" aria-label="Oddálit (víc taktů)" title="Oddálit">−</button>
+          <button id="tl-in" class="key-btn square" aria-label="Přiblížit (míň taktů)" title="Přiblížit">+</button>
+        </div>
+
       </div>
       <div class="deck-row">
         <div class="cell transport">

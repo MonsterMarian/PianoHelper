@@ -360,49 +360,87 @@ export function drawKeyMap(canvas, { lo, hi, songLo, songHi }) {
   return map;
 }
 
-// Casova osa: takty, nahled not, usek s uchyty, pozice.
-export const HANDLE = 7;                  // sirka uchytu useku v px (i pro klikani)
-export function drawTimeline(canvas, { notes, duration, now, loop, loopOn, bars, lo, hi }) {
+// Casova osa ve dvou patrech:
+//  - prehled cele skladby (tenky pruh) s oknem, ktere ukazuje priblizeny usek,
+//  - detail po taktech: kazdy takt je bunka s cislem a nahledem not, usek s uchyty, pozice.
+export const HANDLE = 8;                  // sirka uchytu useku v px (i pro klikani)
+
+export function drawOverview(canvas, { notes, duration, now, loop, loopOn, t0, t1, lo, hi }) {
   const { ctx, W, H } = fitCanvas(canvas);
   const c = colors();
   ctx.clearRect(0, 0, W, H);
   const x = (t) => (t / (duration || 1)) * W;
   const range = Math.max(1, hi - lo);
-  const top = 13;                         // nahore cisla taktu, pod nimi noty
-
-  // takty: carka u kazdeho, cislo tak husto, jak se vejde
-  if (bars?.length) {
-    const every = [1, 2, 4, 8, 16, 32, 64].find((k) => (x(bars[Math.min(k, bars.length - 1)]) - x(bars[0])) >= 26) || 64;
-    ctx.font = '500 9px "JetBrains Mono", ui-monospace, monospace';
-    ctx.textBaseline = 'top';
-    ctx.textAlign = 'left';
-    for (let i = 0; i < bars.length - 1; i++) {
-      const bx = Math.round(x(bars[i])) + 0.5;
-      const major = i % every === 0;
-      ctx.fillStyle = major ? 'rgba(239,233,220,0.22)' : 'rgba(239,233,220,0.07)';
-      ctx.fillRect(bx, major ? 0 : top, 1, major ? H : H - top);
-      if (major) { ctx.fillStyle = c.muted || '#7a7366'; ctx.fillText(String(i + 1), bx + 3, 2); }
-    }
-  }
-
   for (const n of notes) {
     ctx.fillStyle = n.h === 'L' ? c.L : c.R;
-    ctx.globalAlpha = n.s < now ? 0.95 : 0.35;
-    ctx.fillRect(x(n.s), H - 4 - ((n.p - lo) / range) * (H - top - 8), Math.max(1, x(n.e) - x(n.s)), 1.5);
+    ctx.globalAlpha = 0.55;
+    ctx.fillRect(x(n.s), H - 2 - ((n.p - lo) / range) * (H - 4), Math.max(1, x(n.e) - x(n.s)), 1);
   }
   ctx.globalAlpha = 1;
-
   if (loop) {
-    const xa = x(loop.a), xb = x(loop.b);
-    ctx.fillStyle = loopOn ? 'rgba(255,79,31,0.16)' : 'rgba(239,233,220,0.06)';
-    ctx.fillRect(xa, 0, xb - xa, H);
-    ctx.fillStyle = loopOn ? c.accent : 'rgba(239,233,220,0.45)';
-    for (const hx of [xa, xb]) {                              // uchyty
+    ctx.fillStyle = loopOn ? 'rgba(255,79,31,0.35)' : 'rgba(239,233,220,0.12)';
+    ctx.fillRect(x(loop.a), 0, Math.max(2, x(loop.b) - x(loop.a)), H);
+  }
+  if (t1 - t0 < duration - 1e-3) {                           // okno priblizeni
+    ctx.fillStyle = 'rgba(239,233,220,0.10)';
+    ctx.fillRect(x(t0), 0, x(t1) - x(t0), H);
+    ctx.strokeStyle = 'rgba(239,233,220,0.7)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(x(t0)) + 0.5, 0.5, Math.max(2, x(t1) - x(t0) - 1), H - 1);
+  }
+  ctx.fillStyle = c.paper;
+  ctx.fillRect(x(now) - 0.5, 0, 1, H);
+}
+
+export function drawBars(canvas, { notes, bars, meter, t0, t1, now, loop, loopOn, lo, hi }) {
+  const { ctx, W, H } = fitCanvas(canvas);
+  const c = colors();
+  ctx.clearRect(0, 0, W, H);
+  const span = t1 - t0 || 1;
+  const x = (t) => ((t - t0) / span) * W;
+  const range = Math.max(1, hi - lo);
+  const top = 16;
+  let cur = 0;
+  while (cur + 2 < bars.length && bars[cur + 1] <= now) cur++;
+  const minCell = Math.min(...bars.slice(1).map((b, i) => x(b) - x(bars[i])).filter((w) => w > 0), 999);
+  const labelEvery = [1, 2, 4, 8, 16].find((k) => minCell * k >= 22) || 32;
+
+  ctx.font = '500 10px "JetBrains Mono", ui-monospace, monospace';
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  for (let i = 0; i < bars.length - 1; i++) {
+    const xa = x(bars[i]), xb = x(bars[i + 1]);
+    if (xb < 0 || xa > W) continue;
+    const inLoop = loop && i >= loop.from && i < loop.to;
+    ctx.fillStyle = inLoop ? (loopOn ? 'rgba(255,79,31,0.18)' : 'rgba(239,233,220,0.08)')
+      : i === cur ? 'rgba(239,233,220,0.09)' : i % 2 ? 'rgba(239,233,220,0.025)' : 'rgba(239,233,220,0.045)';
+    ctx.fillRect(xa + 0.5, 0, Math.max(0, xb - xa - 1), H);
+    if (xb - xa >= 48 && meter > 1) {                          // doby
+      ctx.fillStyle = 'rgba(239,233,220,0.08)';
+      for (let k = 1; k < meter; k++) ctx.fillRect(Math.round(xa + ((xb - xa) * k) / meter), top, 1, H - top);
+    }
+    if (i % labelEvery === 0) {
+      ctx.fillStyle = i === cur ? c.paper : inLoop && loopOn ? c.accent : c.muted;
+      ctx.fillText(String(i + 1), xa + 4, 3);
+    }
+  }
+  for (const n of notes) {                                     // nahled not
+    if (n.e < t0 || n.s > t1) continue;
+    ctx.fillStyle = n.h === 'L' ? c.L : c.R;
+    ctx.globalAlpha = n.s < now ? 0.9 : 0.45;
+    ctx.fillRect(x(n.s), H - 3 - ((n.p - lo) / range) * (H - top - 6), Math.max(1.5, x(n.e) - x(n.s) - 1), 2);
+  }
+  ctx.globalAlpha = 1;
+  if (loop) {                                                  // uchyty useku
+    ctx.fillStyle = loopOn ? c.accent : 'rgba(239,233,220,0.5)';
+    for (const hx of [x(loop.a), x(loop.b)]) {
+      if (hx < -HANDLE || hx > W + HANDLE) continue;
       ctx.fillRect(hx - 1, 0, 2, H);
-      ctx.fillRect(hx - HANDLE / 2, H / 2 - 9, HANDLE, 18);
+      roundRect(ctx, hx - HANDLE / 2, H / 2 - 10, HANDLE, 20, 2);
+      ctx.fill();
     }
     ctx.fillStyle = loopOn ? '#1a0b05' : '#0c0b09';
-    for (const hx of [xa, xb]) { ctx.fillRect(hx - 1.5, H / 2 - 4, 1, 8); ctx.fillRect(hx + 0.5, H / 2 - 4, 1, 8); }
+    for (const hx of [x(loop.a), x(loop.b)]) { ctx.fillRect(hx - 1.5, H / 2 - 4, 1, 8); ctx.fillRect(hx + 0.5, H / 2 - 4, 1, 8); }
   }
   ctx.fillStyle = c.paper;
   ctx.fillRect(x(now) - 0.75, 0, 1.5, H);
