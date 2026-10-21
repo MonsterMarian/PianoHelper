@@ -54,7 +54,9 @@ function stepCostInner(fa, qa, pa, fb, qb, pb, gap, shape, still) {
   if (fa === fb) {
     if (qa === qb) return 0;
     const d = Math.abs(qb - qa);
-    if (gap <= 0.06 && !shape) return 10 + d;                           // stejny prst jinde = konec legata
+    // stejny prst jinde v legatu = posunout prst po klavese, prakticky nehratelne (A#4 A4 D4 C4
+    // vychazelo 4 3 1 1; pri 10 + d bylo v knihovne 89 takovych mist, ted ~12)
+    if (gap <= 0.06 && !shape) return 16 + d;
     if (shape) return 1 + 0.3 * d;                                      // akordy: zvednout a presunout tvar
     // oddelene tony: radsi vymenit prst a nechat ruku na miste; po dlouhe pauze presun nevadi
     return 1 + 0.3 * d + 5 * Math.max(0, 1 - gap / 0.6);

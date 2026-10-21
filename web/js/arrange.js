@@ -61,10 +61,18 @@ export const STEP_ORDER = Object.keys(STEPS);
  * Melodie = nejvyssi ton kazdeho nastupu prave ruky ("skyline", Uitdenbogerd & Zobel 1999).
  * Ozdoby (kratsi nez 1/4 doby, ktere hned prechazi na sousedni ton) se vynechaji.
  * Nota drzi do dalsiho tonu melodie (legato), nejdele vsak puvodni delku.
+ * Takt, kde prava ruka mlci a leva hraje aspon 3 tony (predehra, mezihra), dostane melodii
+ * z horniho hlasu leve ruky - jinak by snadne verze v tu chvili mlcely. Zustane v leve ruce.
  */
 export function extractMelody(notes, grid) {
-  const rh = notes.filter((n) => n.h !== 'L');
-  const tops = onsetGroups(rh).map((g) => g.notes.reduce((a, b) => (b.p > a.p ? b : a)));
+  const beats = beatTimes(grid, songEnd(notes));
+  const lhBars = [];
+  for (let i = 0; i + grid.meter < beats.length; i += grid.meter) {
+    const a = beats[i], b = beats[i + grid.meter], inBar = (n) => n.s >= a - 0.03 && n.s < b - 0.03;
+    if (!notes.some((n) => n.h !== 'L' && inBar(n)) && notes.filter((n) => n.h === 'L' && inBar(n)).length >= 3) lhBars.push([a - 0.03, b - 0.03]);
+  }
+  const voice = notes.filter((n) => n.h !== 'L' || lhBars.some(([a, b]) => n.s >= a && n.s < b));
+  const tops = onsetGroups(voice).map((g) => g.notes.reduce((a, b) => (b.p > a.p ? b : a)));
   const kept = [];
   for (let i = 0; i < tops.length; i++) {
     const n = tops[i], next = tops[i + 1];
@@ -79,7 +87,7 @@ export function extractMelody(notes, grid) {
   return kept.map((n, i) => {
     const next = kept[i + 1];
     const e = next ? Math.max(n.s + 0.1, Math.min(n.e, next.s)) : n.e;
-    return { p: n.p, s: n.s, e, h: 'R' };
+    return { p: n.p, s: n.s, e, h: n.h === 'L' ? 'L' : 'R' };
   });
 }
 
@@ -110,7 +118,7 @@ export function simplifyMelody(melody, grid, end) {
   return kept.map((n, i) => {
     const next = kept[i + 1];
     const e = next ? Math.max(n.s + 0.1, Math.min(Math.max(n.e, n.s + T * step * 0.9), next.s - 0.02)) : n.e;
-    return { p: n.p, s: n.s, e, h: 'R' };
+    return { p: n.p, s: n.s, e, h: n.h === 'L' ? 'L' : 'R' };
   });
 }
 
@@ -129,8 +137,10 @@ function core(notes, grid) {
   const melody = extractMelody(notes, grid);
   const lh = [];
   let last = -Infinity;
+  const lhMel = melody.filter((m) => m.h === 'L');
   for (const g of onsetGroups(notes.filter((n) => n.h === 'L'))) {
     if (g.t - last < grid.beat / 2 - 0.03) continue;
+    if (lhMel.some((m) => m.s < g.t + 0.03 && m.e > g.t + 0.03)) continue;          // tady leva hraje melodii
     const ns = [...g.notes].sort((a, b) => a.p - b.p);
     lh.push(...new Set([ns[0], ns[ns.length - 1]]));
     last = g.t;
@@ -184,6 +194,7 @@ function leftHandSimple(notes, melody, grid, end) {
       // kratka zmena akordu uprostred taktu je pro zacatecnika zbytecna
       if (k === 0 && ch.si % unit !== 0 && ei - ch.si < 2) continue;
       // leva ruka nesmi prekryt melodii: strop = nejnizsi melodicky ton v okne - 3
+      if (melody.some((m) => m.h === 'L' && m.s < b && m.e > a)) continue;     // melodii hraje leva ruka
       const mel = melody.filter((m) => m.s < b && m.e > a).map((m) => m.p);
       const ceiling = (mel.length ? Math.min(...mel) : 72) - 3;
       const bass = bassFor(notes, a, b, ceiling, 0.25 * grid.beat);

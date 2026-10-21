@@ -189,6 +189,20 @@ test('zacatecnik: dlouhy ton na konci okna + ton na dobe nesmi byt tesne po sobe
   for (let i = 1; i < out.length; i++) assert.ok(out[i].s - out[i - 1].s >= 0.55, out.map((n) => `${n.p}@${n.s}`).join(' '));
 });
 
+test('takt, kde hraje jen leva ruka (predehra), nezmizi ze snadnych verzi', () => {
+  const { notes } = song();
+  // 2. takt: prava mlci, leva hraje jen melodii C3 D3 E3 F3
+  const bar = 2, beat = 0.5;
+  const twoBars = notes.filter((n) => !(n.s >= bar && n.s < 2 * bar));
+  [48, 50, 52, 53].forEach((p, i) => twoBars.push({ p, s: bar + i * beat, e: bar + i * beat + 0.45, h: 'L' }));
+  for (const level of [1, 2, 3]) {
+    const out = arrange(twoBars, level);
+    const inBar = out.filter((n) => n.s >= bar - 0.01 && n.s < 2 * bar - 0.01);
+    assert.ok(inBar.length >= (level === 1 ? 1 : 4), `L${level}: ${inBar.map((n) => n.p)}`);
+    if (level === 2) for (const g of onsetGroups(out.filter((n) => n.h === 'L'))) assert.equal(g.notes.length, 1, `L2 leva ruka @${g.t}`);
+  }
+});
+
 test('uroven 2: melodie + jeden bas na takt, leva ruka pod melodii', () => {
   const { notes } = song();
   const out = arrange(notes, 2);

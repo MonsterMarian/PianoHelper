@@ -57,7 +57,7 @@ palec pod/přes prst.
 | 10 | palec na černé (+2 když soused je bílý) | 1 + 2 + 2 |
 | 11 | malíček na černé vedle bílé | 2 |
 | 12 | podklad palce: stejná úroveň / palec na černé | 0,5 + 1 / 0,5 + 3 |
-| – | stejný prst na jiné klávese: legato | 10 + vzdálenost |
+| – | stejný prst na jiné klávese: legato (posunout prst po klávese) | 16 + vzdálenost |
 | – | … oddělené tóny (pauza *g*) | 1 + 0,3·vzdálenost + 5·max(0; 1 − g/0,6 s) |
 | – | … akord → akord (posun celého tvaru) | 1 + 0,3·vzdálenost |
 | – | souzvuk jinak než podle učebnice | 2 (trojzvuk) / 1 (dvojzvuk) |
@@ -89,7 +89,8 @@ upravené. Každá změna má test v `tests/theory.test.mjs`:
   prst, a Ódu na radost hrál s překládáním místo v poloze C.
 - **Každý podklad +0,5.** Při jinak stejné ceně vyhraje varianta s méně podklady
   (F dur 1234 1234 místo 2123 1231).
-- **Stejný prst na jiné klávese = 10 + vzdálenost.** Parncutt tento případ vůbec nezná
+- **Stejný prst na jiné klávese = 16 + vzdálenost** (dřív 10: A♯4 A4 D4 C4 vycházelo 4 3 1 1,
+  palec by po klávese sklouzl; v knihovně 89 takových míst, teď 12 – vše přechody basu v rozkladech). Parncutt tento případ vůbec nezná
   (předpokládá legato). Bez penalizace by model jezdil palcem po sousedních klávesách.
 - **Malíček na krajní notě akordu se nepočítá jako slabý prst**, aby vyhrálo 1-3-5 nad 1-2-4.
 - **Stejný prst na jiné klávese je drahý jen při legatu.** Krátké akordy s pauzou (staccato
@@ -182,7 +183,7 @@ Co jsme podle toho změnili (testy v `tests/theory.test.mjs`):
 - **Zbytečné křížení:** podklad / překlad, po kterém se melodie hned obrátí a všechny tři tóny
   se vejdou do 7 půltónů, stojí +2. Ve stupnici ruka pokračuje dál, tady by se jen vrátila.
 - Audit na 19 skladbách × 5 úrovních (znovu převedená knihovna, nové úrovně): „palec na černé
-  v krokové melodii“ 281 → 311 (záměr: palec v poloze), stejný prst v legatu 110 → 89,
+  v krokové melodii“ 281 → 314 (záměr: palec v poloze), stejný prst v legatu 110 → 12,
   rozpětí přes mez 3 → 2. Všech 12 durových stupnic dál podle ABRSM.
 
 ## Omezení a plán

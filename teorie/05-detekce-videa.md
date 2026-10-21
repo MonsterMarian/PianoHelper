@@ -81,7 +81,9 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
 - Záblesky: dvě sousední půltónové noty naráz se poznají jako jedna; bílá klávesa mezi dvěma
   černými notami těsně po sobě občas vyjde navíc (< 1 % not). Pravidlo „bílá mezi dvěma
   hranými černými musí svítit víc než ony“ jsme zkusili a zahodili: záblesk samotné noty A
-  rozsvítí i G♯ a A♯, takže by mazalo skutečná A (83 skutečných not za 1 falešnou).
+  rozsvítí i G♯ a A♯, takže by mazalo skutečná A (83 skutečných not za 1 falešnou). Větší
+  tolerance pro sousední půltóny (aby šly dva sousední tóny naráz) nepomůže: záře saturuje
+  sousedy na stejný jas, tolerance 8 / 15 / 30 = přesnost 92 / 82 / 71 % místo 99 %.
 - Rychlost = rychlost dekódování videa (~3,5 ms/snímek při 480p).
 - Pokud video celou dobu nemá zvuk, oktáva zůstane odhadem. Dá se zadat ručně
   `--start-note E2` (nejlevější bílá klávesa).

@@ -51,9 +51,12 @@ a ty jen nad levou rukou, aby se ruce nesrazily.
 1. V každém nástupu pravé ruky se vezme **nejvyšší tón**. Melodie bývá nahoře; tento postup
    (Uitdenbogerd & Zobel 1999) je jednoduchý a u popových tutoriálů funguje dobře.
 2. **Vnitřní hlas pryč:** tón, který začne pod ještě znějícím vyšším tónem melodie, je doprovod.
-3. **Ozdoby pryč:** tón kratší než ¼ doby, po kterém do ¼ doby následuje sousední tón
+3. **Takty bez pravé ruky:** když pravá ruka v taktu mlčí a levá hraje aspoň 3 tóny (předehra,
+   mezihra), melodií je horní hlas levé ruky a zůstane v levé ruce. Dřív v těch taktech snadné
+   verze mlčely (Vivid Vice, Ma Meilleure Ennemie: 7 taktů). Bas se tam nepřidává.
+4. **Ozdoby pryč:** tón kratší než ¼ doby, po kterém do ¼ doby následuje sousední tón
    (o 1–2 půltóny), je příraz nebo trylek.
-4. **Legato:** tón drží do dalšího tónu melodie, nejdéle však původní délku. Rytmus se tedy
+5. **Legato:** tón drží do dalšího tónu melodie, nejdéle však původní délku. Rytmus se tedy
    nemění, jen zmizí mezery mezi tóny.
 
 ### Bas (Snadné)
@@ -116,5 +119,5 @@ noty, žádné pomlky.
 - Vícehlasá analýza místo skyline (melodie v levé ruce nebo uprostřed).
 - Volitelná transpozice do „bílé“ tóniny (C dur / a moll) pro úplné začátečníky.
 - Zjednodušení rytmu (synkopy na dobu) pro Začátečníka.
-- Melodie, která je v originálu jen v levé ruce, se do snadných verzí nedostane (skyline bere
-  pravou ruku).
+- Melodie v levé ruce, když pravá zároveň hraje doprovod (skyline bere jen pravou ruku;
+  takty, kde pravá mlčí, už jsou vyřešené).
