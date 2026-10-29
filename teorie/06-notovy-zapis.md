@@ -11,8 +11,12 @@ vytisknout nebo exportovat do PDF či MIDI. Kód: `web/js/musicxml.js`.
    (doba *i* + zlomek mezi dobou *i* a *i+1*), takže zápis sedí i při proměnném tempu.
    Zaokrouhluje se na šestnáctiny (4 dílky na dobu).
 2. **Osnovy:** pravá ruka nahoře, levá dole (přehozené noty jsou v osnově ruky, která je hraje).
-3. **Jeden hlas na osnovu:** noty se stejným začátkem tvoří akord. Když nota zní přes začátek
-   dalšího akordu, zkrátí se na něj. Mezery se vyplní pomlkami.
+3. **Dva hlasy na osnovu:** noty se stejným začátkem tvoří akord. Nota, která zní aspoň dobu
+   přes další nástup v téže ruce (bas pod rozkladem, držený tón melodie), jde do 2. hlasu
+   (horní osnova hlasy 1–2, dolní 5–6 jako v MuseScore), takže se nezkrátí. Pomlky 2. hlasu se
+   netisknou a takt, kde 2. hlas nic nehraje, ho nemá. Jinak se nota přes začátek dalšího
+   akordu zkrátí na něj. Mezery se vyplní pomlkami. Dřív (jeden hlas) export zkrátil 2,3 % not
+   v úrovních Pokročilé a Mistr – právě držený bas, který tam aranžmá přidává.
 4. **Takty a ligatury:** nota přes taktovou čáru se rozdělí a sváže ligaturou. Délky, které
    nejsou zapisovatelné jednou hodnotou (např. 5/16), se rozloží na zapisovatelné
    (čtvrťová + šestnáctina) spojené ligaturou.
@@ -28,13 +32,18 @@ Pro 3 skladby × 5 úrovní (15 souborů) se zápis načetl knihovnou `music21` 
 - počet a výšky not = noty v přehrávači (0 ztracených, 0 navíc),
 - každá nota má prstoklad.
 
+Po přidání 2. hlasu (2026-10-29): celá knihovna 19 skladeb × 5 úrovní (95 souborů) – každý hlas
+v každém taktu má délku taktu, počet not sedí, 982 taktů má 2. hlas; music21 na Ódě, Levels
+a Fourth of July (15 souborů): počet not i délky hlasů bez chyby. Test: držený bas pod
+rozkladem zůstane celou notou v hlase 6.
+
 Vizuálně v OpenSheetMusicDisplay: Óda na radost, úroveň 2 = melodie 3 3 4 5 | 5 4 3 2 | …
 se správným rytmem (čtvrťová s tečkou + osmina + půlová), levá ruka celé noty C | G | C | G.
 
 ## Omezení (shortcut)
 
-- **Jeden hlas na osnovu.** Držená nota, pod kterou se pohybuje jiný hlas, se zkrátí. Řešení:
-  druhý `<voice>` pro držené noty.
+- **Nejvýš dva hlasy na osnovu.** Dvě držené noty s různým začátkem přes sebe ve 2. hlase se
+  pořád zkrátí na začátek té pozdější (3. hlas by pomohl, v knihovně je to vzácné).
 - **Šestnáctinová mřížka.** Trioly a složené takty (6/8) se zaokrouhlí na nejbližší
   šestnáctinu. Řešení: detekce triol (dělení doby na 3) a `<time-modification>`.
 - Trámce (spojení osmin a šestnáctin) se nezapisují, dopočítá je notační program sám.

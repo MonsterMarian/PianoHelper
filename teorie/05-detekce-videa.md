@@ -103,7 +103,11 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
 - Záblesky: držená nota se pořád rozdělí, když ji rozsvítí úzký záblesk jediného souseda
   (do 5 kláves) – to vypadá stejně jako její vlastní opakovaný úhoz. Levels: ze zbylých 385
   takových úhozů zní 42 % (skutečné 44 %), takže rozdělených je odhadem jen pár procent.
-- Záblesky: dvě sousední půltónové noty naráz se poznají jako jedna; bílá klávesa mezi dvěma
+- Záblesky: dvě sousední půltónové noty naráz se poznají jako jedna. Změřeno na Levels
+  (2026-10-29): 294 kandidátů (úhoz, který svítí, ale soused o půltón uhozený naráz svítí víc)
+  ve zvuku „zní“ stejně často jako tatáž chvíle posunutá o 3 půltóny (46 % / 45 %; přijaté
+  noty 58 % / 35 %), takže to nejsou ztracené noty; jen 29 kandidátů s velkým rozdílem jasu
+  ukazuje signál (45 % / 24 %, ~1 % not) – na pravidlo z jednoho videa málo; bílá klávesa mezi dvěma
   černými notami těsně po sobě občas vyjde navíc (< 1 % not). Pravidlo „bílá mezi dvěma
   hranými černými musí svítit víc než ony“ jsme zkusili a zahodili: záblesk samotné noty A
   rozsvítí i G♯ a A♯, takže by mazalo skutečná A (83 skutečných not za 1 falešnou). Větší

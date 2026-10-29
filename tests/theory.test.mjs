@@ -282,11 +282,13 @@ test('MusicXML: kazdy takt ma spravnou delku, zadna nota se neztrati', async () 
       const measures = xml.split('<measure ').slice(1);
       assert.ok(measures.length > 0);
       for (const [i, m] of measures.entries()) {
-        for (const staff of [1, 2]) {
-          const durs = [...m.matchAll(/<note>(<chord\/>)?.*?<duration>(\d+)<\/duration>.*?<staff>(\d)<\/staff>/g)]
-            .filter((x) => !x[1] && Number(x[3]) === staff).map((x) => Number(x[2]));
-          assert.equal(durs.reduce((a, b) => a + b, 0), grid.meter * 4, `${name} L${level} takt ${i + 1} osnova ${staff}`);
+        // kazdy zapsany hlas (horni osnova 1-2, dolni 5-6) ma presne delku taktu; hlasy 1 a 5 vzdy
+        const byVoice = new Map();
+        for (const x of m.matchAll(/<note[^>]*>(<chord\/>)?(?:(?!<\/note>).)*?<duration>(\d+)<\/duration>(?:(?!<\/note>).)*?<voice>(\d)<\/voice>/g)) {
+          if (!x[1]) byVoice.set(x[3], (byVoice.get(x[3]) || 0) + Number(x[2]));
         }
+        assert.ok(byVoice.has('1') && byVoice.has('5'), `${name} L${level} takt ${i + 1}: ${[...byVoice.keys()]}`);
+        for (const [v, d] of byVoice) assert.equal(d, grid.meter * 4, `${name} L${level} takt ${i + 1} hlas ${v}`);
       }
       // hlavicky not bez navazanych ligatur = pocet not
       const heads = [...xml.matchAll(/<note>(?:(?!<\/note>).)*<pitch>(?:(?!<\/note>).)*<\/note>/g)].filter((x) => !x[0].includes('<tie type="stop"/>'));
@@ -504,4 +506,16 @@ test('prstoklad Levels: palec na C#6 od prvni do posledni noty motivu (okraje sk
   for (let i = 0; i < 8; i++) a.push({ p: 88, s: i * 0.47, e: i * 0.47 + 0.2 }, { p: 92, s: i * 0.47, e: i * 0.47 + 0.2 }, { p: 85, s: i * 0.47 + 0.23, e: i * 0.47 + 0.43 });
   fingerHand(a, 'R');
   assert.ok(a.filter((n) => n.p === 85).every((n) => n.f === 1), a.filter((n) => n.p === 85).map((n) => n.f).join(''));
+});
+
+test('MusicXML: drzeny bas pod rozkladem se nezkrati (2. hlas dolni osnovy)', async () => {
+  const { toMusicXML } = await import('../web/js/musicxml.js');
+  const grid = grid4(20);
+  const notes = [{ p: 36, s: 0, e: 1.95, h: 'L', f: 5 }];                       // C2 cely takt
+  [43, 48, 52, 48, 43, 48, 52, 48].forEach((p, i) => notes.push({ p, s: i * 0.25, e: i * 0.25 + 0.24, h: 'L', f: 1 }));
+  [72, 74, 76, 77].forEach((p, i) => notes.push({ p, s: i * 0.5, e: i * 0.5 + 0.45, h: 'R', f: i + 1 }));
+  const xml = toMusicXML(notes, grid, 'test', { tonic: 0, mode: 'dur' });
+  const c2 = [...xml.matchAll(/<note>(?:(?!<\/note>).)*<step>C<\/step><octave>2<\/octave>(?:(?!<\/note>).)*<\/note>/g)].map((x) => x[0]);
+  assert.equal(c2.length, 1, c2.join(' | '));
+  assert.match(c2[0], /<duration>16<\/duration>.*<voice>6<\/voice>/);         // cela nota, 2. hlas dolni osnovy
 });

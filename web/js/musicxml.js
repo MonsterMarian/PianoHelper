@@ -33,10 +33,20 @@ function splitDuration(d) {
   return out;
 }
 
+// Drzena nota, pod kterou ta sama ruka hraje dal (aspon dobu po dalsim nastupu, napr. bas pod
+// rozkladem), jde do 2. hlasu osnovy - jinak by se zkratila na dalsi nastup. Vraci [hlas 1, hlas 2].
+function splitVoices(notes, q) {
+  const starts = [...new Set(notes.map((n) => q(n.s)))].sort((a, b) => a - b);
+  const held = (n) => {
+    const next = starts.find((t) => t > q(n.s));
+    return next !== undefined && q(n.e) - next >= DIV;
+  };
+  return [notes.filter((n) => !held(n)), notes.filter(held)];
+}
+
 /**
- * Jedna osnova = jeden hlas s akordy. Prekryvajici se noty se zkrati na zacatek dalsiho
- * akordu (shortcut: vnitrni drzene hlasy se nezapisi zvlast; pro vic hlasu by byl potreba <voice> 2).
- * Vraci udalosti [{ start, dur, notes: [{p, f}] }] vcetne pomlk (notes = []).
+ * Jeden hlas s akordy. Prekryvajici se noty se zkrati na zacatek dalsiho akordu (drzene noty
+ * uz odebral splitVoices). Vraci udalosti [{ start, dur, notes: [{p, f}] }] vcetne pomlk (notes = []).
  */
 function staffEvents(notes, q, total) {
   const byStart = new Map();
@@ -85,11 +95,12 @@ function measureChunks(events, measureLen) {
   return measures;
 }
 
-function noteXml(chunk, staff, spell) {
+function noteXml(chunk, staff, voice, spell) {
   const [type, dots] = TYPES[chunk.dur];
   const dotXml = dots ? '<dot/>' : '';
   if (!chunk.notes.length) {
-    return `<note><rest/><duration>${chunk.dur}</duration><voice>${staff}</voice><type>${type}</type>${dotXml}<staff>${staff}</staff></note>`;
+    const hide = voice % 4 === 2 ? ' print-object="no"' : '';                 // pomlky 2. hlasu se netisknou
+    return `<note${hide}><rest/><duration>${chunk.dur}</duration><voice>${voice}</voice><type>${type}</type>${dotXml}<staff>${staff}</staff></note>`;
   }
   return chunk.notes.map((n, i) => {
     const [step, alter] = spell[n.p % 12];
@@ -99,7 +110,7 @@ function noteXml(chunk, staff, spell) {
     const finger = chunk.showFinger && n.f ? `<technical><fingering>${n.f}</fingering></technical>` : '';
     const notations = tied || finger ? `<notations>${tied}${finger}</notations>` : '';
     return `<note>${i ? '<chord/>' : ''}<pitch><step>${step}</step>${alter ? `<alter>${alter}</alter>` : ''}<octave>${octave}</octave></pitch>`
-      + `<duration>${chunk.dur}</duration>${ties}<voice>${staff}</voice><type>${type}</type>${dotXml}<staff>${staff}</staff>${notations}</note>`;
+      + `<duration>${chunk.dur}</duration>${ties}<voice>${voice}</voice><type>${type}</type>${dotXml}<staff>${staff}</staff>${notations}</note>`;
   }).join('');
 }
 
@@ -118,7 +129,9 @@ export function toMusicXML(notes, grid, title = 'PianoHelper', key = detectKey(n
   const fifths = FIFTHS_MAJOR[tonic];
   const spell = fifths < 0 ? FLAT : SHARP;
 
-  const staves = ['R', 'L'].map((h, i) => measureChunks(staffEvents(notes.filter((n) => (n.h === 'L' ? 'L' : 'R') === h), q, total), measureLen));
+  // osnova -> [hlas 1, hlas 2] -> takty; hlasy 1-2 v horni osnove, 5-6 v dolni (zvyk MuseScore)
+  const staves = ['R', 'L'].map((h) => splitVoices(notes.filter((n) => (n.h === 'L' ? 'L' : 'R') === h), q)
+    .map((vn) => measureChunks(staffEvents(vn, q, total), measureLen)));
   const nMeasures = total / measureLen;
   const bpm = Math.round(60 / grid.beat);
 
@@ -131,9 +144,13 @@ export function toMusicXML(notes, grid, title = 'PianoHelper', key = detectKey(n
         + '<clef number="1"><sign>G</sign><line>2</line></clef><clef number="2"><sign>F</sign><line>4</line></clef></attributes>'
         + `<direction placement="above"><direction-type><metronome><beat-unit>quarter</beat-unit><per-minute>${bpm}</per-minute></metronome></direction-type><sound tempo="${bpm}"/></direction>`;
     }
-    xml += (staves[0][m] || []).map((c) => noteXml(c, 1, spell)).join('');
-    xml += `<backup><duration>${measureLen}</duration></backup>`;
-    xml += (staves[1][m] || []).map((c) => noteXml(c, 2, spell)).join('');
+    const voices = [];
+    staves.forEach((vs, s) => vs.forEach((ms, v) => {
+      const chunks = ms[m] || [];
+      if (v && !chunks.some((c) => c.notes.length)) return;                     // prazdny 2. hlas se nepise
+      voices.push(chunks.map((c) => noteXml(c, s + 1, s * 4 + v + 1, spell)).join(''));
+    }));
+    xml += voices.join(`<backup><duration>${measureLen}</duration></backup>`);
     body += `${xml}</measure>`;
   }
 
