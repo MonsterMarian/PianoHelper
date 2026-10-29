@@ -12,7 +12,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from types import SimpleNamespace  # noqa: E402
-from note_detector import (DetectedNote, DetectorConfig, _flash_notes, _flash_ranges, assign_hands, detect_keyboard,  # noqa: E402
+from note_detector import (DetectedNote, DetectorConfig, _flash_notes, _flash_ranges, _read_mode, assign_hands, detect_keyboard,  # noqa: E402
                            detect_notes_from_video, drop_bursts, fix_hand_spans, median_frame, parse_note_name)
 
 FPS = 30
@@ -176,47 +176,61 @@ def test_keyboard_with_vignette_and_glow():
     assert len(whites) == N_WHITE and whites[0].midi_note == FIRST, (len(whites), whites[0].note_name)
 
 
+def _flash(g, f0, k, frames=3):
+    # zablesk pri dopadu noty: klavesa nejjasnejsi, sousede slabsi (zare), 2 klavesy na kazdou stranu
+    for d, v in ((0, 250), (1, 195), (2, 150)):
+        for j in {k - d, k + d} & set(range(g.shape[1])):
+            g[f0:f0 + frames, j] = np.maximum(g[f0:f0 + frames, j], v)
+
+
 def test_flash_notes():
     # nota pri dopadu blikne pres 2 klavesy na kazdou stranu, pak sviti jen ona; opakovany uhoz
-    kb = SimpleNamespace(keys=[SimpleNamespace(midi_note=60 + i) for i in range(12)])
     g = np.full((40, 12), 70.0)
     for f0 in (10, 18):
-        g[f0:f0 + 3, 2:7] = 250                                     # zablesk
+        _flash(g, f0, 4)
         g[f0 + 3:f0 + 6, 4] = 240                                   # nota E4
-    g[16:18, 4] = 170                                               # pohasina, ale konci az dalsim uhozem
-    dt = 1 / 30
-    notes = _flash_notes(g, kb, np.arange(40) * dt, dt)
-    assert [(n.midi_note, round(n.start_time / dt), round(n.end_time / dt)) for n in notes] == [(64, 10, 18), (64, 18, 24)]
+    g[16:18, 4] = 195                                               # pohasina, ale konci az dalsim uhozem
+    assert _flash_found(g) == [(64, 10, 18), (64, 18, 24)]
 
 
 def test_flash_held_note_and_neighbour():
-    # drzene E4 (svetlo 200) a uhoz F4 vedle: zablesk F4 rozsviti i E4, ale E4 nekonci
+    # drzene E4 a uhoz F4 vedle: zare F4 je slabsi nez E4, E4 nekonci
     g = np.full((60, 12), 70.0)
-    g[10:13, 2:7] = 250
+    _flash(g, 10, 4)
     g[13:41, 4] = 200
-    g[22:25, 3:8] = 250
+    _flash(g, 22, 5)
     g[25:35, 5] = 240
     assert _flash_found(g) == [(64, 10, 41), (65, 22, 35)]
-    # siroky zablesk (D4 + F#4 naraz) a E4 pak sviti nejvic: novy uhoz E4. Na Levels jsou takove
-    # uhozy z 91/133 ve zvuku (tools/eval_detekce.py), slucovat je s drzenou notou bylo horsi.
+    # skutecny opakovany uhoz drzene E4 (zablesk ma stred na E4) = nova nota. Slucovat takove uhozy
+    # s drzenou notou bylo podle zvuku horsi (Levels: 91 ze 133 skutecnych, tools/eval_detekce.py).
     g = np.full((60, 12), 70.0)
-    g[10:13, 2:7] = 250
+    _flash(g, 10, 4)
     g[13:41, 4] = 200
-    g[22:25, 1:8] = 250
-    g[25:35, [2, 6]] = 240
-    assert _flash_found(g) == [(64, 10, 22), (62, 22, 35), (64, 22, 41), (66, 22, 35)]
+    _flash(g, 22, 4)
+    assert _flash_found(g) == [(64, 10, 22), (64, 22, 41)]
 
 
 def test_flash_fast_repeats_do_not_overlap():
     # E4 kazde 3 snimky (0,1 s): kazdy uhoz je nota, zadna nezasahuje do dalsi
     g = np.full((60, 12), 70.0)
     for f0 in range(10, 40, 3):
-        g[f0, 2:7] = 250
-        g[f0 + 1, 4] = 240
-    g[38:45, 4] = 240                       # posledni uhoz drzi (kratky samotny ton se nenajde, viz shortcut)
+        _flash(g, f0, 4, frames=1)
+        g[f0 + 1, 4], g[f0 + 2, 4] = 240, 200                       # sviti a pred dalsim uhozem pohasina
     found = _flash_found(g)
     assert [s for _, s, _ in found] == list(range(10, 40, 3)), found
     assert all(e <= s2 for (_, _, e), (_, s2, _) in zip(found, found[1:])), found
+
+
+def test_read_mode():
+    rng = np.random.default_rng(0)
+    hit = rng.random((3000, 50)) < 0.08                      # linie dopadu blika
+    lit = hit & (rng.random(hit.shape) < 0.4)                # Synthesia: klavesa sviti pod svitici linii
+    assert _read_mode(lit, hit) == 'keys'
+    hands = rng.random(hit.shape) < 0.05                     # natocene piano: klavesy meni ruce (Let Her Go:
+                                                             # meni se min nez linie, stary pomer to nepoznal)
+    assert _read_mode(hands, hit) == 'flash'
+    assert _read_mode(hands, np.zeros_like(hit)) == 'keys'   # staticky filc nad klavesami
+    assert _read_mode(lit & (rng.random(hit.shape) < 0.1), hit) == 'line'   # klavesy se skoro nebarvi
 
 
 def _flash_found(g, **kw):

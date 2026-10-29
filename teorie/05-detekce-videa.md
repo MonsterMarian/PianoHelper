@@ -54,14 +54,19 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
 - **Klávesnice:** linka nad klávesami je jasnější než šedavé bílé klávesy. Mediánový filtr přes
   ~1/60 výšky obrazu ji smaže, takže se jako pás bílých kláves najdou klávesy. Obraz tmavne ke
   krajům (vinětace), proto se sloupce před hledáním kláves zesvětlí podle obálky jasu bílých
-  kláves (nejvýš 4×).
-- **Poznání:** u Synthesie se linka nad klávesou mění 2–3× víc než klávesa (poměr změn
-  klávesy / linky 0,30–0,52 u všech 18 Synthesia videí v knihovně). Když se klávesy mění víc
-  než linka, ale nejvýš 4× víc (Levels: 1,23), zakrývají je ruce a noty se čtou ze záblesků nad
-  klávesnicí. Linka, která se skoro nemění (statický filc nad klávesami, noty dopadají na něj),
-  záblesky nemá – tam se čtou klávesy. Dřív takové video dalo 0 not.
+  kláves (nejvýš 4×). Tmavá scéna (Rousseau: bílé klávesy jas ~115) se zkusí znovu zesvětlená
+  1,5× a 2×; stín rukou v mediánu (hráč sedí pořád na stejném místě) dělí pás bílých kláves,
+  proto se mezery do 1/10 šířky obrazu přemostí. Ostatních 21 videí má klávesnici beze změny.
+- **Poznání** (`_read_mode`): v Synthesii klávesa svítí, protože na ni dopadá nota, takže linka
+  nad ní svítí taky (do 5 snímků předem) – **vazba klávesa → linka** 0,88–0,99 u všech 18
+  Synthesia videí. U natočeného piana mění barvu kláves ruce nezávisle na lince: Levels 0,65,
+  Let Her Go 0,65, Wake Me Up 0,38, Nuvole Bianche (Rousseau) 0,71. Pod 0,8 se noty čtou ze
+  záblesků. Dřívější pravidlo „klávesy se mění víc než linka“ (poměr 0,30–0,52 vs. 1,23 u Levels)
+  Let Her Go (poměr 0,58) zařadilo jako Synthesii: 5081 not, ve zvuku 3 %. Linka, která se skoro
+  nemění (statický filc nad klávesami, noty dopadají na něj), záblesky nemá – tam se čtou klávesy.
 - **Záblesk** při dopadu rozsvítí i 2 sousední klávesy na každou stranu, ale jen na 3 snímky.
-  Nota = skok jasu (začátek) + klávesa, která svítí ještě 0,15 s potom a víc než oba sousedé.
+  Nota = skok jasu (začátek) + klávesa, která svítí ještě 0,08 s potom a víc než oba sousedé
+  (záře sousední noty je slabší).
   Opakovaný akord nezhasne, proto nota končí i dalším úhozem **téže** klávesy – záblesk
   sousední noty, který potom svítí víc, drženou notu neukončí (dřív ji usekl) a rychle
   opakované tóny se nepřekrývají (Levels: 702 → 0 přesahů). Bílá klávesa se měří jen v části,
@@ -81,7 +86,10 @@ basic-pitch sám chybuje, takže čísla slouží hlavně k porovnání dvou ver
 | video | posun obrazu | přesnost | úplnost |
 |---|---|---|---|
 | Fourth of July (Synthesia, kontrola nástroje) | −96 ms | 99,2 % | 59,4 % (EASY verze nehraje vše, co je slyšet) |
-| Levels, natočené piano | −130 ms | 59,1 % | 64,0 % |
+| Levels (Pianella) | −122 ms | 63,5 % | 60,8 % |
+| Let Her Go (Pianella, fialová, jiskry) | −256 ms | 60,4 % | 48,7 % |
+| Wake Me Up (Pianella, oranžová, jiskry) | −123 ms | 63,2 % | 60,6 % |
+| Nuvole Bianche (Rousseau, tmavá scéna) | −162 ms | 73,4 % | 47,2 % |
 
 Co tím vyšlo na Levels (2026-10-29): dvě pravidla, která jsme přidali podle hrubší metriky
 (nárůst energie na harmonických), detekci **zhoršila** a jsou pryč:
@@ -90,8 +98,13 @@ Co tím vyšlo na Levels (2026-10-29): dvě pravidla, která jsme přidali podle
 - sloučení držené noty se „širokým“ zábleskem souseda: ze 133 zahozených úhozů 91 ve zvuku je
   (úplnost 64,3 % → 60,4 %).
 
-Parametry záblesků (0,15 s po úhozu, jas +100, skok +30) jsou na plató: mřížka 0,1–0,2 s × 80–120
-× 20–40 dá F1 nejvýš 0,615 proti 0,614; 0,2 s je výrazně horší (0,47).
+Parametry záblesků se ladily na všech 4 natočených videích (mřížka 0,04–0,15 s × jas 80–120
+× skok 15–30). Nastavení podle samotného Levels (0,15 s, +100, +30) bylo na ostatních horší;
+vybrané **0,08 s, +120, +15** má nejlepší nejhorší případ: F1 0,538 → 0,588, žádné video horší
+(Levels +0,007, ostatní +0,04 až +0,10). Přesnost vzrostla na všech čtyřech. Křížová kontrola
+(výběr na 3 videích, test na 4.) ukázala, že agresivnější volba (0,04 s) nezobecňuje – na Levels
+by F1 kleslo na 0,551. Testy používají záblesk, kde je uhozená klávesa nejjasnější a sousedé
+slabší; model „5 kláves stejně jasně“ skutečným videím neodpovídal.
 
 ## Výsledky
 
@@ -99,7 +112,7 @@ Parametry záblesků (0,15 s po úhozu, jas +100, skok +30) jsou na plató: mř�
 |---|---|---|---|---|
 | Fourth of July (UVnXmLGu4cI) | černé pozadí, popisky pod klávesami, 2 barvy | E2–D6, vzor 100 % | 734, ruce L 172 / R 557 | ~30 s / 5,5 min videa |
 | Ma Meilleure Ennemie (SFyKbYbpHkc) | obrázek na pozadí, poloprůhledná klávesnice, krátké noty s písmenem | A2–F♯6, vzor 100 % | 1138 | ~40 s / 2,5 min |
-| Avicii – Levels, Pianella (PSolYNrEiWc) | natočené piano s rukama, vinětace, záblesky | A0–C8, vzor 100 % | 2524; proti zvuku (basic-pitch) přesnost 59 %, úplnost 64 % | ~1 min / 3,5 min |
+| Avicii – Levels, Pianella (PSolYNrEiWc) | natočené piano s rukama, vinětace, záblesky | A0–C8, vzor 100 % | 2233; proti zvuku (basic-pitch) přesnost 64 %, úplnost 61 % | ~1 min / 3,5 min |
 | syntetické (test) | známé noty | E2–D6 | 12/12, začátky ±1 snímek, ruce 12/12 | 1 s |
 
 ## Omezení

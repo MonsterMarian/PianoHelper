@@ -242,10 +242,19 @@ def _black_pattern(whites, blacks, W: float):
 def detect_keyboard(frame: np.ndarray, config: Optional[DetectorConfig] = None) -> Optional[KeyboardLayout]:
     """
     Najde klavesnici ve snimku (idealne median, viz median_frame).
-    Vraci None, pokud ve snimku zadna klavesnice neni.
+    Vraci None, pokud ve snimku zadna klavesnice neni. Tmava scena (Rousseau: bile klavesy
+    jas ~115) se zkusi znovu zesvetlena 1,5x a 2x - normalni videa se najdou hned napoprve.
     """
     config = config or DetectorConfig()
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    for gain in (1.0, 1.5, 2.0):
+        kb = _detect_keyboard_gray(np.minimum(gray * gain, 255), config)
+        if kb is not None:
+            return kb
+    return None
+
+
+def _detect_keyboard_gray(gray: np.ndarray, config: DetectorConfig) -> Optional[KeyboardLayout]:
     h, w = gray.shape
 
     # 1) Pas bilych klaves: nejdelsi blok svetlych radku ve spodnich 70 % obrazu.
@@ -268,7 +277,8 @@ def detect_keyboard(frame: np.ndarray, config: Optional[DetectorConfig] = None) 
 
     # Vodorovny rozsah klavesnice = sloupce, ktere jsou v pasu bile svetle.
     white_prof = gray[wy0:wy1].mean(axis=0)
-    cols = _runs(white_prof > 150, merge_gap=max(3, w // 100))
+    # mezera do 1/10 sirky = stin rukou v medianu (Rousseau: hrac sedi porad na stejnem miste)
+    cols = _runs(white_prof > 150, merge_gap=max(3, w // 10))
     kx0, kx1 = max(cols, key=lambda r: r[1] - r[0])
     if kx1 - kx0 < w * 0.3:
         return None
@@ -415,7 +425,7 @@ def _band_luma(frame, y1: int, ranges) -> np.ndarray:
 
 
 def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float,
-                 rise: float = 30, keep: float = 100, post_s: float = 0.15,
+                 rise: float = 15, keep: float = 120, post_s: float = 0.08,
                  min_dur: float = 0.0) -> List[DetectedNote]:
     """
     Noty z pasu tesne nad klavesnici ve videich, kde nota pri dopadu blikne pres 2 klavesy
@@ -426,7 +436,9 @@ def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float
     Zkousene a zahozene podle kontroly proti zvuku (tools/eval_detekce.py, Levels): zaloha pro
     kratke noty (65 not, ve zvuku 5) a slouceni drzene noty se sirokym zableskem souseda (ze 133
     "falesnych" uhozu 91 ve zvuku je).
-    shortcut: noty kratsi nez post_s (~0,15 s) se nenajdou, upravit az s presnejsi referenci.
+    Parametry (kontrola 0,08 s po uhozu, jas +120, skok +15) podle zvuku na 4 natocenych videich
+    (Pianella x3, Rousseau): proti drivejsim 0,15 s / +100 / +30 F1 0,538 -> 0,588, zadne video horsi.
+    shortcut: noty kratsi nez post_s (~0,08 s) se nenajdou, upravit az s presnejsi referenci.
     shortcut: dve sousedni pultonove noty naraz se rozpoznaji jen jako jedna, upravit az bude vadit.
     """
     n, K = g.shape
@@ -455,6 +467,23 @@ def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float
                                   end_time=round(float(times[e] + dt), 4)))
     notes.sort(key=lambda n: (n.start_time, n.midi_note))
     return drop_bursts(notes)
+
+
+def _read_mode(lit: np.ndarray, hit: np.ndarray) -> str:
+    """
+    Odkud cist noty: 'keys' (klavesy se barvi), 'line' (nebarvi se, jen linie dopadu nad nimi),
+    'flash' (natocene piano, klavesy zakryvaji ruce -> zablesky). Synthesia: klavesa sviti, protoze
+    na ni dopada nota, takze linie nad ni sviti taky (vazba 0,88-0,99 u 18 videi). Natocene piano:
+    klavesy meni ruce nezavisle na linii (Pianella, Rousseau 0,38-0,71). Linie, ktera se skoro nemeni
+    (staticky filc nad klavesami), zablesky nema.
+    """
+    if lit.mean() * 5 < hit.mean():
+        return 'line'
+    near_hit = hit.copy()
+    for s in range(1, 6):                        # linie se rozsviti o par snimku driv nez klavesa
+        near_hit[s:] |= hit[:-s]
+    coupling = (lit & near_hit).sum() / max(1, lit.sum())
+    return 'flash' if coupling < 0.8 and hit.mean() * 4 > lit.mean() else 'keys'
 
 
 def _changed(colors: np.ndarray, fps_eff: float, threshold: float, window_s: float = 8.0) -> np.ndarray:
@@ -700,16 +729,14 @@ def detect_notes_from_video(video_path: str, config: Optional[DetectorConfig] = 
         flashes[gone] = _band_luma(med, flash_y, flash_rg)
     lit = _changed(colors, 1 / dt, config.lit_threshold)
     hit = _changed(hits, 1 / dt, config.lit_threshold)
-    if hit.mean() < lit.mean() < 4 * hit.mean():
-        # Pomer lit/hit: Synthesia 0,30-0,52 (linie nad klavesou se meni vic nez klavesa), natocene
-        # ruce pres klavesy (Pianella) 1,23 - linie tam blika pri kazdem dopadu. Linie, ktera se
-        # skoro nemeni (staticky filc nad klavesami), neni zablesk: tam se ctou klavesy.
+    mode = _read_mode(lit, hit)
+    if mode == 'line':
+        print("  Klavesy se v tomto videu nebarvi - ctu noty z linie dopadu")
+        notes = _active_to_notes(hit, colors, kb, times, dt, config.min_note_duration)
+    elif mode == 'flash':
         print("  Klavesy zakryvaji ruce - ctu noty ze zablesku nad klavesnici")
         notes = _flash_notes(flashes, kb, times, dt, min_dur=config.min_note_duration)
     else:
-        if lit.mean() * 5 < hit.mean():
-            print("  Klavesy se v tomto videu nebarvi - ctu noty z linie dopadu")
-            lit = hit
         notes = _active_to_notes(lit, colors, kb, times, dt, config.min_note_duration)
     if config.split_hands and assign_hands(notes):
         print(f"\n  Ruce podle barvy: L={sum(n.hand == 'L' for n in notes)}, R={sum(n.hand == 'R' for n in notes)}")
