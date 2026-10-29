@@ -97,8 +97,9 @@ noty, žádné pomlky.
   přidá osminový vzor *kvinta – oktáva – kvinta* (prsty 2-1-2), bas drží malíček celou délku.
   Původní tón tedy zůstane, jen se k němu přidá pohyb. Tóny nad melodii se vynechají; když by
   do melodie narazila oktáva, nastoupí místo ní nejvyšší jiný tón akordu pod melodií
-  (C3 G3 E3 G3, prsty 5-1-2-1). Rozkladů s dírou bylo v knihovně 60 z 335, teď 30 z 342
-  (zbytek: do melodie naráží i kvinta). Poslední tón rozkladu je celá osmina, i když originál
+  (C3 G3 E3 G3, prsty 5-1-2-1). Když se rozklad pod melodii nevejde celý (naráží i kvinta),
+  nepřidá se vůbec a zůstane jen držený bas – díra zní hůř než žádný rozklad. Rozkladů s dírou
+  bylo v knihovně 60 z 335, teď 15 z 327 (tam stejný tón už v levé ruce zní, takže díra není slyšet). Poslední tón rozkladu je celá osmina, i když originál
   pustí bas o kousek dřív (dřív v notách šestnáctina + pomlka).
 
 ### Nakonec pro každou úroveň

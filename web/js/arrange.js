@@ -292,6 +292,8 @@ function advanced(notes, grid, end, { octaves }) {
     let high = n.p + 12;
     for (let p = Math.min(n.p + 11, top - 3); high >= top - 2 && p > n.p; p--) if (p !== fifth && ch.tones.includes(p % 12)) high = p;
     const pattern = [n.p, fifth, high, fifth].map((p) => (p !== null && p < top - 2 ? p : null));
+    // rozklad, ktery se pod melodii cely nevejde, by mel diry -> radsi jen drzeny bas
+    if (pattern.includes(null)) { result.push({ ...n }); continue; }
     const times = eighthsIn(beats, n.s, n.e);
     const FINGERS = high > fifth ? [5, 2, 1, 2] : [5, 1, 2, 1];   // ucebnicovy rozklad leve ruky (palec nahore)
     result.push({ ...n, fixF: 5 });

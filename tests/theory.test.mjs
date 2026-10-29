@@ -547,3 +547,16 @@ test('melodie leve ruky: dohra s arpeggiovanym akordem ani kratky predtakt nejso
   const keys = easy.map((n) => `${n.p}@${n.s}`);
   assert.equal(new Set(keys).size, keys.length, `ton dvakrat: ${keys}`);
 });
+
+test('pokrocile: rozklad, ktery se pod melodii nevejde, se nepridava (zadne diry)', () => {
+  // C3 drzene, melodie nizko (A3): kvinta G3 by narazila -> jen drzeny bas, zadne pridane tony
+  const notes = [];
+  for (let b = 0; b < 8; b++) {
+    notes.push({ p: 48, s: b * 2, e: b * 2 + 1.95, h: 'L' });
+    [57, 59, 60, 59].forEach((p, i) => notes.push({ p, s: b * 2 + i * 0.5, e: b * 2 + i * 0.5 + 0.45, h: 'R' }));
+    notes.push({ p: 64, s: b * 2, e: b * 2 + 0.45, h: 'R' }, { p: 67, s: b * 2, e: b * 2 + 0.45, h: 'R' });
+  }
+  const out = arrange(notes, 'advanced', grid4(40));
+  assert.deepEqual(out.filter((n) => n.h === 'L' && n.added).map((n) => `${n.p}@${n.s}`), []);
+  assert.ok(out.some((n) => n.h === 'L' && n.p === 48 && n.s === 0 && n.e > 1.9), 'bas drzi');
+});
