@@ -56,9 +56,9 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
   krajům (vinětace), proto se sloupce před hledáním kláves zesvětlí podle obálky jasu bílých
   kláves (nejvýš 4×). Tmavá scéna (Rousseau: bílé klávesy jas ~115) se zkusí znovu zesvětlená
   1,5× a 2×; stín rukou v mediánu (hráč sedí pořád na stejném místě) dělí pás bílých kláves,
-  proto se mezery do 1/10 šířky obrazu přemostí. Ostatních 21 videí má klávesnici beze změny.
+  proto se mezery do 1/10 šířky obrazu přemostí. Ostatních 22 videí má klávesnici beze změny.
 - **Poznání** (`_read_mode`): v Synthesii klávesa svítí, protože na ni dopadá nota, takže linka
-  nad ní svítí taky (do 5 snímků předem) – **vazba klávesa → linka** 0,88–0,99 u všech 18
+  nad ní svítí taky (do 5 snímků předem) – **vazba klávesa → linka** 0,88–0,99 u všech 19
   Synthesia videí. U natočeného piana mění barvu kláves ruce nezávisle na lince: Levels 0,65,
   Let Her Go 0,65, Wake Me Up 0,38, Nuvole Bianche (Rousseau) 0,71. Pod 0,8 se noty čtou ze
   záblesků. Dřívější pravidlo „klávesy se mění víc než linka“ (poměr 0,30–0,52 vs. 1,23 u Levels)
@@ -83,13 +83,34 @@ spárují podle výšky a začátku (±50 ms, po odečtení posunu obrazu proti 
 (kolik detekovaných not je ve zvuku) a úplnost (kolik not ze zvuku detekce našla) – **po notách**.
 basic-pitch sám chybuje, takže čísla slouží hlavně k porovnání dvou verzí na stejném videu.
 
-| video | posun obrazu | přesnost | úplnost |
-|---|---|---|---|
-| Fourth of July (Synthesia, kontrola nástroje) | −96 ms | 99,2 % | 59,4 % (EASY verze nehraje vše, co je slyšet) |
-| Levels (Pianella) | −122 ms | 63,5 % | 60,8 % |
-| Let Her Go (Pianella, fialová, jiskry) | −256 ms | 60,4 % | 48,7 % |
-| Wake Me Up (Pianella, oranžová, jiskry) | −123 ms | 63,2 % | 60,6 % |
-| Nuvole Bianche (Rousseau, tmavá scéna) | −162 ms | 73,4 % | 47,2 % |
+Všech 21 skladeb, 23 videí – dvě skladby jsou stažené dvakrát (Synthesia z knihovny přehrávače, tedy po kalibraci oktávy podle zvuku; natočená
+piana přímo z detektoru). Úplnost u Synthesie je nižší, protože EASY tutoriály nehrají vše, co je
+ve zvuku (basic-pitch slyší i doprovod a alikvóty):
+
+| video | not | posun obrazu | přesnost | úplnost |
+|---|---|---|---|---|
+| Sufjan Stevens - Fourth Of July | 732 | −96 ms | 99,2 % | 59,4 % |
+| Jujutsu Kaisen OP 2 - VIVID VICE | 365 | −100 ms | 94,0 % | 74,7 % |
+| Jujutsu Kaisen Season 2 OP 2 - SPECIALZ | 1034 | −120 ms | 93,6 % | 76,6 % |
+| Jujutsu Kaisen OP - Kaikai Kitan | 1343 | −165 ms | 93,5 % | 77,5 % |
+| Jujutsu Kaisen Season 3 ED - Yoake no Uta | 873 | −99 ms | 93,5 % | 69,1 % |
+| Jujutsu Kaisen ED - Lost in Paradise | 362 | −57 ms | 93,4 % | 70,3 % |
+| Jujutsu Kaisen Season 2 OP - Ao no Sumika | 931 | −97 ms | 92,2 % | 77,0 % |
+| Jujutsu Kaisen 0 Movie ED - Sakayume | 1161 | −133 ms | 92,1 % | 77,6 % |
+| Jujutsu Kaisen Phantom Parade OP - Avant | 483 | −93 ms | 91,7 % | 64,5 % |
+| Jujutsu Kaisen Season 2 OST - If I Am With You (一緒なら) | 368 | −89 ms | 91,6 % | 56,0 % |
+| Jujutsu Kaisen Season 2 ED - Akari | 361 | −122 ms | 90,6 % | 68,6 % |
+| Jujutsu Kaisen Season 3 OP - AIZO | 1172 | −62 ms | 89,7 % | 76,5 % |
+| Jujutsu Kaisen ED 2 - give it back by Cö shu Nie | 246 | −63 ms | 89,4 % | 63,0 % |
+| Jujutsu Kaisen Season 2 Ep.21 Insert Song - Climax☆JUMPING! | 351 | −104 ms | 89,2 % | 68,9 % |
+| Jujutsu Kaisen Season 2 ED 2 - more than words | 375 | −103 ms | 89,1 % | 70,6 % |
+| Jujutsu Kaisen 0 Movie Theme - Ichizu (一途) | 959 | −131 ms | 88,4 % | 77,6 % |
+| Stromae, Pomme - Ma Meilleure Ennemie (from Arcane Season 2) | 1129 | −79 ms | 88,3 % | 69,1 % |
+| **natočené piano** | | | | |
+| Ludovico Einaudi - Nuvole Bianche | 1773 | −162 ms | 73,4 % | 47,2 % |
+| Avicii - Levels | 2233 | −122 ms | 63,5 % | 60,8 % |
+| Avicii - Wake Me Up | 2346 | −123 ms | 63,2 % | 60,6 % |
+| Passenger - Let Her Go | 2282 | −256 ms | 60,4 % | 48,7 % |
 
 Co tím vyšlo na Levels (2026-10-29): dvě pravidla, která jsme přidali podle hrubší metriky
 (nárůst energie na harmonických), detekci **zhoršila** a jsou pryč:
@@ -124,13 +145,11 @@ slabší; model „5 kláves stejně jasně“ skutečným videím neodpovídal.
 - Záblesky: držená nota, kterou rozsvítí záblesk souseda a pak svítí nejvíc, se rozdělí na dvě.
   Z obrazu to od opakovaného úhozu odlišit nejde a zvuk říká, že většina takových úhozů je
   skutečná, proto se nic neslučuje.
-- Záblesky: dvě sousední půltónové noty naráz se poznají jako jedna. Změřeno na Levels
-  (2026-10-29): 294 kandidátů (úhoz, který svítí, ale soused o půltón uhozený naráz svítí víc)
-  ve zvuku „zní“ stejně často jako tatáž chvíle posunutá o 3 půltóny (46 % / 45 %; přijaté
-  noty 58 % / 35 %), takže to nejsou ztracené noty; jen 29 kandidátů s velkým rozdílem jasu
-  ukazuje signál (45 % / 24 %, ~1 % not) – na pravidlo z jednoho videa málo (měřeno ještě
-  hrubší metrikou, s basic-pitch to stojí za přeměření); bílá klávesa mezi dvěma
-  černými notami těsně po sobě občas vyjde navíc (< 1 % not). Pravidlo „bílá mezi dvěma
+- Záblesky: dvě sousední půltónové noty naráz se poznají jako jedna. Přeměřeno po notách proti
+  zvuku (basic-pitch, 4 natočená videa): zamítnutý soused, který svítí, ale soused o půltón
+  uhozený naráz svítí víc, je ve zvuku jen ve 2–6 % případů – stejně jako náhodná výška (tatáž
+  místa posunutá o 3 půltóny 0–5 %; přijaté noty 60–73 %). Noty se tím tedy neztrácejí;
+  bílá klávesa mezi dvěma černými notami těsně po sobě občas vyjde navíc (< 1 % not). Pravidlo „bílá mezi dvěma
   hranými černými musí svítit víc než ony“ jsme zkusili a zahodili: záblesk samotné noty A
   rozsvítí i G♯ a A♯, takže by mazalo skutečná A (83 skutečných not za 1 falešnou). Větší
   tolerance pro sousední půltóny (aby šly dva sousední tóny naráz) nepomůže: záře saturuje

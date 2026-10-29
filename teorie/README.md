@@ -40,18 +40,21 @@ převedená videa.
 ## Stav (co je hotové a ověřené)
 
 - [x] Detekce klávesnice podle vzoru černých kláves; oktáva podle zvuku. Test: syntetické video
-      se známými notami + 2 reálná videa různého stylu.
+      se známými notami + 19 Synthesia videí (17 skladeb) a 4 natočená piana (Pianella ×3, Rousseau).
+- [x] **Kontrola detekce proti zvuku** (`tools/eval_detekce.py`, basic-pitch) po notách. Podle ní
+      se vybraly parametry záblesků a zahodila dvě pravidla, která detekci zhoršovala.
 - [x] **Sledování dob s proměnným tempem** (dopředu + zpětný průchod), takt 3/4 / 4/4 podle
       indexů dob. Testy: 3/4 a 4/4 s chvěním ±15 ms, zrychlení 84 → 132 BPM s rubatem.
 - [x] **Akordy přes Viterbi** s cenou změny podle metrické váhy doby; melodie váží méně, bas
       preferuje základ. Test: Óda na radost C | G | C | G i přes průchodné tóny.
-- [x] Úrovně 1–5 s testy invariant (úroveň 1 hraje jednu notu naráz, levá ruka je pod melodií,
-      rozpětí ruky ≤ oktáva…). **Úroveň 3 s vedením hlasů** (horní hlas skáče ≤ 4 půltóny).
+- [x] Žebřík úrovní (snazší = jen tóny originálu, těžší = originál + přidané) s testy invariant
+      (začátečník hraje jednu notu naráz, levá ruka je pod melodií, rozpětí ruky ≤ oktáva…);
+      z blízkých nástupů zůstává ten na silnější době.
 - [x] Prstoklad: učebnicové výsledky pro stupnice C, G, D a F dur v obou rukou, dvě oktávy C dur,
       kvintakordy, pětiprstovou polohu a Ódu na radost.
 - [x] Přehození noty do druhé ruky, když by akord přesáhl oktávu (a označení v UI).
-- [x] **Export notového zápisu** (MusicXML) s prstokladem. 15 souborů ověřeno přes music21:
-      délky taktů, výšky a počty not sedí.
+- [x] **Export notového zápisu** (MusicXML) s prstokladem a **2. hlasem pro držené noty**.
+      95 souborů knihovny + 15 přes music21: délky hlasů, výšky a počty not sedí.
 - [x] Zvuk ověřen měřením signálu na výstupu přehrávače (headless Chrome, 30/30 vzorků).
 - [x] **Režim „čekej na mě“**: čas se zastaví 4 ms před akordem, dokud hráč nezahraje jeho tóny
       (MIDI nebo klávesnice počítače); špatná klávesa svítí červeně, správné mají kroužek.
@@ -66,9 +69,11 @@ převedená videa.
    melodiích. U rychlých pasáží by pomohl statistický model z datasetu PIG
    (Nakamura et al. 2020). Dataset je ke stažení po odsouhlasení licence, to musí udělat
    uživatel.
-3. **Druhý hlas a trioly v notovém zápisu** (viz 06-notovy-zapis.md).
-4. Hodnocení hraní v režimu „čekej na mě“ (přesnost, zpoždění, nejčastější chyby po úsecích).
-5. Volitelná transpozice do „bílé“ tóniny (C dur / a moll) pro úplné začátečníky.
+3. **Trioly v notovém zápisu** (viz 06-notovy-zapis.md; druhý hlas už je).
+4. **Natočené piano přesněji:** krátké noty (< 0,08 s) a úplnost 47–61 % proti zvuku. Kandidát:
+   rozhodovat sporné úhozy podle zvuku (basic-pitch), když ho video má.
+5. Hodnocení hraní v režimu „čekej na mě“ (přesnost, zpoždění, nejčastější chyby po úsecích).
+6. Volitelná transpozice do „bílé“ tóniny (C dur / a moll) pro úplné začátečníky.
 
 ## Zdroje
 

@@ -439,7 +439,8 @@ def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float
     Parametry (kontrola 0,08 s po uhozu, jas +120, skok +15) podle zvuku na 4 natocenych videich
     (Pianella x3, Rousseau): proti drivejsim 0,15 s / +100 / +30 F1 0,538 -> 0,588, zadne video horsi.
     shortcut: noty kratsi nez post_s (~0,08 s) se nenajdou, upravit az s presnejsi referenci.
-    shortcut: dve sousedni pultonove noty naraz se rozpoznaji jen jako jedna, upravit az bude vadit.
+    Dve sousedni pultonove noty naraz vyjdou jako jedna; zamitnuty soused ale podle zvuku skoro nikdy
+    nezni (2-6 % jako nahodna vyska na 4 videich), takze se tim noty neztraceji.
     """
     n, K = g.shape
     post = max(1, int(round(post_s / dt)))
@@ -473,7 +474,7 @@ def _read_mode(lit: np.ndarray, hit: np.ndarray) -> str:
     """
     Odkud cist noty: 'keys' (klavesy se barvi), 'line' (nebarvi se, jen linie dopadu nad nimi),
     'flash' (natocene piano, klavesy zakryvaji ruce -> zablesky). Synthesia: klavesa sviti, protoze
-    na ni dopada nota, takze linie nad ni sviti taky (vazba 0,88-0,99 u 18 videi). Natocene piano:
+    na ni dopada nota, takze linie nad ni sviti taky (vazba 0,88-0,99 u 19 videi). Natocene piano:
     klavesy meni ruce nezavisle na linii (Pianella, Rousseau 0,38-0,71). Linie, ktera se skoro nemeni
     (staticky filc nad klavesami), zablesky nema.
     """

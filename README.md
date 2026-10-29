@@ -10,7 +10,8 @@ pip install -r requirements.txt
 python server.py                 # → http://localhost:8000
 ```
 
-V prohlížeči vlož odkaz na YouTube video (Synthesia styl), klikni **Převést** a po chvíli se
+V prohlížeči vlož odkaz na YouTube video s padajícími notami (Synthesia nebo natočené piano
+s padajícími notami, např. Pianella, Rousseau), klikni **Převést** a po chvíli se
 skladba objeví v knihovně. V knihovně je i demo (Óda na radost) a jde otevřít libovolný `.mid`.
 
 Převod jde spustit i z příkazové řádky:
@@ -49,8 +50,10 @@ Přehrávač je statický web (HTML + JS moduly bez buildu). Zvuky pian jsou v `
 ## Jak to funguje
 
 1. **Detekce z videa** (`note_detector.py`): medián snímků → klávesnice → vzor černých kláves
-   určí názvy → rozsvícené klávesy po snímcích = noty → barva = ruka. Oktáva se ověří podle
-   zvuku (`audio_octave.py`). Podrobně: [teorie/05-detekce-videa.md](teorie/05-detekce-videa.md).
+   určí názvy → rozsvícené klávesy po snímcích = noty → barva = ruka. U natočeného piana, kde
+   klávesy zakrývají ruce, se noty čtou ze záblesků nad klávesnicí (styl videa se pozná sám).
+   Oktáva se ověří podle zvuku (`audio_octave.py`). Podrobně:
+   [teorie/05-detekce-videa.md](teorie/05-detekce-videa.md).
 2. **Hudební analýza** (`web/js/analysis.js`): sledování dob (i proměnné tempo), takt, akordy
    (Viterbi), tónina.
 3. **Obtížnosti** (`web/js/arrange.js`): melodie, bas, kvinty, originál, oktávy a rozklady.
@@ -81,9 +84,25 @@ Starší Streamlit GUI (`streamlit run app.py`) je pořád k dispozici.
 ## Testy
 
 ```bash
-python tests/test_detector.py         # syntetické video se známými notami
-node --test tests/theory.test.mjs     # analýza, prstoklad, ruce, obtížnosti
+python -m pytest -q tests/            # detekce: syntetické video se známými notami, záblesky, styl videa
+node --test tests/theory.test.mjs     # analýza, prstoklad, ruce, obtížnosti, notový zápis
 ```
+
+### Kontrola detekce proti zvuku
+
+`tools/eval_detekce.py` porovná noty z videa s notami ze zvukové stopy (basic-pitch) a vypíše
+přesnost a úplnost po notách. basic-pitch na Pythonu 3.14 nejde, proto běží ve vlastním
+prostředí (Python 3.10, ~520 MB, `output/` je mimo git):
+
+```bash
+py -3.10 -m venv output/venv-bp && output/venv-bp/Scripts/pip install basic-pitch
+python tools/eval_detekce.py wav output/<id>/audio.m4a output/<id>/audio.wav
+output/venv-bp/Scripts/python tools/eval_detekce.py ref output/<id>/audio.wav output/<id>/ref.json
+python tools/eval_detekce.py cmp web/songs/<skladba>.json output/<id>/ref.json
+```
+
+Čísla pro 21 skladeb (17 Synthesia, 4 natočená piana) jsou v [teorie/05-detekce-videa.md](teorie/05-detekce-videa.md). Slouží hlavně
+k porovnání dvou verzí detektoru na stejném videu (basic-pitch sám není přesný).
 
 ## Struktura
 
@@ -99,12 +118,15 @@ audio_to_midi.py, instrument_separator.py, app.py    audio cesta a Streamlit GUI
 web/                  přehrávač (index.html, style.css, js/, songs/)
 teorie/               hudební teorie, algoritmy, plán
 tests/                testy
+tools/                eval_detekce.py – kontrola detekce proti zvuku (basic-pitch)
 ```
 
 ## Omezení
 
-- Video musí ukazovat klávesnici, která se při hraní barví (Synthesia a většina tutoriálů).
-  Videa reálného klavíru zvládne jen `--audio`, a to méně přesně.
+- Video musí ukazovat klávesnici a padající noty: buď se klávesy při hraní barví (Synthesia
+  a většina tutoriálů), nebo noty při dopadu na linku nad klávesami bliknou (natočené piano –
+  Pianella, Rousseau). Natočené piano je méně přesné (proti zvuku přesnost 60–73 %, úplnost
+  47–61 %, krátké noty pod ~0,08 s chybí). Video bez padajících not zvládne jen `--audio`.
 - Tempo se sleduje i při zrychlování/zpomalování, ale náhlé zlomy (fermata) se chvíli
   hledají znovu.
 - Převedené skladby jsou jen pro osobní nácvik; do repozitáře se necommitují (`.gitignore`).
