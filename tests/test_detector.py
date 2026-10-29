@@ -12,7 +12,7 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from types import SimpleNamespace  # noqa: E402
-from note_detector import (DetectedNote, DetectorConfig, _flash_notes, assign_hands, detect_keyboard,  # noqa: E402
+from note_detector import (DetectedNote, DetectorConfig, _flash_notes, _flash_ranges, assign_hands, detect_keyboard,  # noqa: E402
                            detect_notes_from_video, drop_bursts, fix_hand_spans, median_frame, parse_note_name)
 
 FPS = 30
@@ -52,9 +52,10 @@ def key_rects():
     return rects
 
 
-def render_video(path, duration=6.0, intro=0.0):
+def render_video(path, duration=6.0, intro=0.0, felt=0):
     rects = key_rects()
     kb_top, white_top, kb_bot = 300, 400, 470
+    stop = kb_top - felt                           # noty dopadaji na horni okraj filcu nad klavesami
     speed = 150.0                                  # px/s padani
     vw = cv2.VideoWriter(path, cv2.VideoWriter_fourcc(*'mp4v'), FPS, (W, H))
     for f in range(int((duration + intro) * FPS)):
@@ -69,10 +70,11 @@ def render_video(path, duration=6.0, intro=0.0):
         t = f / FPS - intro
         for m, s, e, hand in TRUTH:                # padajici noty
             x0, x1, _ = rects[m]
-            y_bot, y_top = kb_top - (s - t) * speed, kb_top - (e - t) * speed
-            if y_bot > 0 and y_top < kb_top:
-                cv2.rectangle(img, (x0 + 2, int(max(0, y_top)) + 2), (x1 - 2, int(min(kb_top, y_bot)) - 2),
+            y_bot, y_top = stop - (s - t) * speed, stop - (e - t) * speed
+            if y_bot > 0 and y_top < stop:
+                cv2.rectangle(img, (x0 + 2, int(max(0, y_top)) + 2), (x1 - 2, int(min(stop, y_bot)) - 2),
                               RH if hand == 'R' else LH, -1)
+        img[stop:kb_top] = (30, 30, 150)           # cerveny filc (felt=0: nic)
         lit = {m: hand for m, s, e, hand in TRUTH if s <= t < e}
         for black in (False, True):                # klavesnice
             for m, (x0, x1, is_b) in rects.items():
@@ -187,10 +189,64 @@ def test_flash_notes():
     assert [(n.midi_note, round(n.start_time / dt), round(n.end_time / dt)) for n in notes] == [(64, 10, 18), (64, 18, 24)]
 
 
+def test_flash_held_note_and_neighbour():
+    # drzene E4 (svetlo 200) a uhoz F4 vedle: zablesk F4 rozsviti i E4, ale E4 nekonci
+    g = np.full((60, 12), 70.0)
+    g[10:13, 2:7] = 250
+    g[13:41, 4] = 200
+    g[22:25, 3:8] = 250
+    g[25:35, 5] = 240
+    assert _flash_found(g) == [(64, 10, 41), (65, 22, 35)]
+    # F4 po zablesku 1 snimek zhasne: drzene E4 sviti samo, ale pred uhozem uz svitilo,
+    # takze to neni kratka nota E4 (dela to zaloha pro staccato)
+    g[25, 5] = 70
+    assert (64, 22, 27) not in _flash_found(g) and (64, 10, 41) in _flash_found(g)
+
+
+def test_flash_fast_repeats_do_not_overlap():
+    # E4 kazde 3 snimky (0,1 s): kazdy uhoz je nota, zadna nezasahuje do dalsi
+    g = np.full((60, 12), 70.0)
+    for f0 in range(10, 40, 3):
+        g[f0, 2:7] = 250
+        g[f0 + 1, 4] = 240
+    found = _flash_found(g)
+    assert [s for _, s, _ in found] == list(range(10, 40, 3)), found
+    assert all(e <= s2 for (_, _, e), (_, s2, _) in zip(found, found[1:])), found
+
+
+def test_flash_short_note():
+    # staccato 0,13 s: po zablesku (3 snimky) sviti jen E4 jeste 1 snimek
+    g = np.full((60, 12), 70.0)
+    g[10:13, 2:7] = 250
+    g[13, 4] = 240
+    assert _flash_found(g) == [(64, 10, 14)]
+    assert _flash_found(g, min_dur=0.2) == []                       # kratsi nez min_note_duration
+
+
+def _flash_found(g, **kw):
+    kb = SimpleNamespace(keys=[SimpleNamespace(midi_note=60 + i) for i in range(len(g[0]))])
+    dt = 1 / 30
+    return [(n.midi_note, round(n.start_time / dt), round(n.end_time / dt))
+            for n in _flash_notes(g, kb, np.arange(len(g)) * dt, dt, **kw)]
+
+
+def test_flash_ranges_narrow_black_key():
+    # nizke rozliseni: cerna klavesa 2 px siroka nesmi dat prazdny rozsah (deleni nulou)
+    keys = [SimpleNamespace(x_left=0, x_right=6, is_black=False), SimpleNamespace(x_left=5, x_right=7, is_black=True),
+            SimpleNamespace(x_left=6, x_right=12, is_black=False)]
+    r = _flash_ranges(SimpleNamespace(keys=keys))
+    assert (r[:, 1] > r[:, 0]).all(), r
+
+
 def test_synthetic_video():
+    for felt in (0, 12):                            # 12 px staticky filc nad klavesami: linie se nemeni
+        _check_synthetic(felt)
+
+
+def _check_synthetic(felt):
     with tempfile.TemporaryDirectory() as d:
         path = os.path.join(d, 'synth.mp4')
-        render_video(path)
+        render_video(path, felt=felt)
 
         cap = cv2.VideoCapture(path)
         kb = detect_keyboard(median_frame(cap))

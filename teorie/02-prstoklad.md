@@ -180,6 +180,9 @@ Co jsme podle toho změnili (testy v `tests/theory.test.mjs`):
   (palec / malíček mezi černou a bílou) jen 0,5 místo 2. Pravidla jsou stavěná na stupnice
   a běhy, kde se palec podkládá; když ruka stojí, klavíristé palec na černou dají.
   Podmínka „aspoň 6 událostí“ je nutná: začátek stupnice C D E F se taky vejde do pěti prstů.
+  Na začátku a konci skladby se okno 7 událostí posune dovnitř, jinak by první a poslední dvě
+  události nikdy „nestály“ (Levels: první C♯6 dřív dvojkou, teď palcem). V akordu zůstává palec
+  na černé 1 bod i v poloze (review 2026-10-29: omylem se zvedl na 3, 86 prstů v knihovně jinak).
 - **Zbytečné křížení:** podklad / překlad, po kterém se melodie hned obrátí a všechny tři tóny
   se vejdou do 7 půltónů, stojí +2. Ve stupnici ruka pokračuje dál, tady by se jen vrátila.
 - Audit na 19 skladbách × 5 úrovních (znovu převedená knihovna, nové úrovně): „palec na černé

@@ -130,7 +130,7 @@ function setSong(title, notes) {
 
 function applyLevel() {
   if (!state.base.length) return;
-  if (!state.cache.has(state.level)) state.cache.set(state.level, arrange(state.base, state.level, state.grid));
+  if (!state.cache.has(state.level)) state.cache.set(state.level, arrange(state.base, state.levels[state.level - 1].key, state.grid));
   state.notes = state.cache.get(state.level);
   player.setNotes(state.notes);
   const ps = state.notes.map((n) => n.p);
@@ -291,6 +291,7 @@ function renderLevels() {
     b.classList.toggle('orig', l.key === 'original');
   }
 }
+renderLevels();                                // popisky i pred nactenim skladby (vychozi zebrik)
 function setLevel(id) { state.level = id; prefs.step = state.levels[id - 1].key; savePrefs(); applyLevel(); }
 
 $('export').addEventListener('click', () => {

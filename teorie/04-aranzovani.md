@@ -51,13 +51,24 @@ a ty jen nad levou rukou, aby se ruce nesrazily.
 1. V každém nástupu pravé ruky se vezme **nejvyšší tón**. Melodie bývá nahoře; tento postup
    (Uitdenbogerd & Zobel 1999) je jednoduchý a u popových tutoriálů funguje dobře.
 2. **Vnitřní hlas pryč:** tón, který začne pod ještě znějícím vyšším tónem melodie, je doprovod.
-3. **Takty bez pravé ruky:** když pravá ruka v taktu mlčí a levá hraje aspoň 3 tóny (předehra,
-   mezihra), melodií je horní hlas levé ruky a zůstane v levé ruce. Dřív v těch taktech snadné
-   verze mlčely (Vivid Vice, Ma Meilleure Ennemie: 7 taktů). Bas se tam nepřidává.
+3. **Úseky bez pravé ruky:** když pravá ruka mlčí aspoň takt a levá má v té pauze aspoň
+   3 nástupy (předehra, mezihra), melodií je horní hlas levé ruky a zůstane v levé ruce. Dřív
+   v těch taktech snadné verze mlčely (Vivid Vice, Ma Meilleure Ennemie: 7 taktů). Bas se tam
+   nepřidává a bas před pauzou se nedrží pod melodii. Pauza se měří od konce posledního tónu
+   pravé ruky, ne po taktech: odhad první doby bývá posunutý a pauza by pak padla přes dva
+   „takty“. Počítají se nástupy, ne tóny – jeden držený akord není melodie.
 4. **Ozdoby pryč:** tón kratší než ¼ doby, po kterém do ¼ doby následuje sousední tón
    (o 1–2 půltóny), je příraz nebo trylek.
 5. **Legato:** tón drží do dalšího tónu melodie, nejdéle však původní délku. Rytmus se tedy
    nemění, jen zmizí mezery mezi tóny.
+
+### Prořídnutí (Střední, Skoro originál, Začátečník)
+
+Když jsou dva nástupy blíž než povolený odstup, zůstane ten na **silnější době** (1. doba
+taktu > doba > osmina > zbytek), ne ten dřívější. Dřív šestnáctinový předtakt vyhodil akord
+na následující době i s melodií. Začátečník: tón na době vytlačí předchozí tón mimo dobu;
+předchozí okno si pak vezme jiný svůj tón, jestli nějaký není těsně u sousedů. V knihovně má
+Začátečník o 0–15 % not méně, ale výrazně víc jich je na době (Ichizu: na době 103 z 258 → 184 z 231).
 
 ### Bas (Snadné)
 
@@ -112,7 +123,11 @@ noty, žádné pomlky.
 - Snadné při změně tempa (rubato): bas sedí na skutečné době a každý takt má bas,
 - Óda na radost, Snadné: v každém taktu jeden bas, drží celý takt,
 - Pokročilé a Mistr: všechny noty pravé ruky originálu zůstanou, přidané noty jsou označené
-  a žádná ruka nepřesáhne oktávu.
+  a žádná ruka nepřesáhne oktávu,
+- regrese z review 2026-10-29: předtakt nevytlačí akord / bas na době (Skoro originál,
+  Střední), tón mimo dobu nevytlačí hlavní tóny (Začátečník), držený akord levé ruky v pauze
+  pravé není melodie, melodie levé ruky se najde i při posunutém odhadu taktu a bas se pod ní
+  nedrží.
 
 ## Plán
 

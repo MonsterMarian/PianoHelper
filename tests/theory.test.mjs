@@ -411,3 +411,98 @@ test('nazvy skladeb z YouTube: bez "EASY Piano Tutorial", nazev + serie', async 
   assert.deepEqual(parseTitle('Avicii - Levels | Piano Cover by Pianella Piano'), { name: 'Levels', series: 'Avicii' });
   assert.equal(youtubeId('https://www.youtube.com/watch?v=_x16Gr3uJf8&list=x'), '_x16Gr3uJf8');
 });
+
+// ── Regrese z code review 2026-10-29 ─────────────────────────────────────────
+const grid4 = (n) => ({ beats: Array.from({ length: n }, (_, i) => i * 0.5), beat: 0.5, meter: 4, downbeat: 0 });
+const at = (out, t, h) => out.filter((n) => (h === 'L') === (n.h === 'L') && Math.abs(n.s - t) < 0.01).map((n) => n.p);
+
+test('skoro original: sestnactinovy predtakt nevytlaci akord na dobe', async () => {
+  const { levelsFor } = await import('../web/js/arrange.js');
+  const notes = [];
+  for (let b = 0; b < 40; b++) {
+    const t0 = b * 2;
+    [79, 76, 72].forEach((p) => notes.push({ p, s: t0, e: t0 + 0.9, h: 'R' }));             // akord na 1. dobe, melodie G5
+    for (let i = 0; i < 4; i++) [72 + (i % 3), 67].forEach((p) => notes.push({ p, s: t0 + 1 + i * 0.125, e: t0 + 1.11 + i * 0.125, h: 'R' }));
+    [74, 76, 77].forEach((p, i) => notes.push({ p, s: t0 + 1.625 + i * 0.125, e: t0 + 1.735 + i * 0.125, h: 'R' }));   // predtakt
+    for (let i = 0; i < 16; i++) [36 + (i % 4) * 2, 48].forEach((p) => notes.push({ p, s: t0 + i * 0.125, e: t0 + 0.11 + i * 0.125, h: 'L' }));
+  }
+  const level = levelsFor(notes).findIndex((l) => l.key === 'thin') + 1;
+  assert.ok(level > 0);
+  const out = arrange(notes, level, grid4(170));
+  for (const t of [2, 4, 6]) assert.deepEqual(at(out, t, 'R'), [72, 76, 79], `akord @${t}`);
+});
+
+test('stredni: sestnactina pred dobou nevytlaci bas na dobe', () => {
+  const notes = [];
+  for (let b = 0; b < 40; b++) {
+    const t0 = b * 2;
+    for (let i = 0; i < 8; i++) [72 + [0, 2, 4, 7][i % 4], 67].forEach((p) => notes.push({ p, s: t0 + i * 0.25, e: t0 + i * 0.25 + 0.22, h: 'R' }));
+    [[36, 43], [43, 50]].forEach((ch, k) => ch.forEach((p) => notes.push({ p, s: t0 + k, e: t0 + k + 0.9, h: 'L' })));
+    notes.push({ p: 38, s: t0 + 1.5, e: t0 + 1.6, h: 'L' }, { p: 40, s: t0 + 1.875, e: t0 + 1.98, h: 'L' });
+  }
+  const out = arrange(notes, 'core', grid4(170));
+  for (const t of [2, 4, 6]) assert.deepEqual(at(out, t, 'L'), [36, 43], `bas @${t}`);
+});
+
+test('zacatecnik: ton mimo dobu (predtakt) nevytlaci hlavni tony na dobach', async () => {
+  const { simplifyMelody } = await import('../web/js/arrange.js');
+  const mel = [[67, 0.5, 0.95], [72, 1.0, 1.9], [71, 1.5, 1.9], [72, 2.0, 2.9], [74, 3.0, 3.9]].map(([p, s, e]) => ({ p, s, e, h: 'R' }));
+  const out = simplifyMelody(mel, grid4(24), 4).map((n) => `${n.p}@${n.s}`);
+  assert.deepEqual(out, ['72@1', '72@2', '74@3']);
+});
+
+test('snadne: drzeny akord leve ruky v pauze prave neni melodie - bas zustane', () => {
+  const notes = [];
+  [76, 74, 72, 74, 0, 0, 0, 0, 76, 76, 76, 77, 74, 74, 74, 72].forEach((p, i) => { if (p) notes.push({ p, s: i * 0.5, e: i * 0.5 + 0.45, h: 'R' }); });
+  for (let b = 0; b < 4; b++) (b === 1 ? [48, 52, 55] : [43, 55]).forEach((p) => notes.push({ p, s: b * 2, e: b * 2 + 1.95, h: 'L' }));
+  for (let b = 4; b < 10; b++) {
+    [72, 74, 76, 77].forEach((p, i) => notes.push({ p, s: b * 2 + i * 0.5, e: b * 2 + i * 0.5 + 0.45, h: 'R' }));
+    notes.push({ p: 48, s: b * 2, e: b * 2 + 1.95, h: 'L' });
+  }
+  assert.deepEqual(at(arrange(notes, 'easy'), 2, 'L'), [48]);
+});
+
+// takt 4 (6-8 s): prava mlci, leva hraje melodii C3 D3 E3 F3; jinde bas se zmenou akordu na 3. dobe
+function lhMelodySong() {
+  const notes = [];
+  for (let b = 0; b < 10; b++) {
+    if (b === 3) { [48, 50, 52, 53].forEach((p, i) => notes.push({ p, s: 6 + i * 0.5, e: 6.45 + i * 0.5, h: 'L' })); continue; }
+    [76, 74, 72, 74].forEach((p, i) => notes.push({ p, s: b * 2 + i * 0.5, e: b * 2 + i * 0.5 + 0.45, h: 'R' }, { p: p - 4, s: b * 2 + i * 0.5, e: b * 2 + i * 0.5 + 0.45, h: 'R' }));
+    [36, 43, 48].forEach((p) => notes.push({ p, s: b * 2, e: b * 2 + 0.95, h: 'L' }));
+    [31, 38, 47].forEach((p) => notes.push({ p, s: b * 2 + 1, e: b * 2 + 1.95, h: 'L' }));
+  }
+  return notes;
+}
+
+test('melodie leve ruky se najde i kdyz odhad taktu sedi posunuty', () => {
+  const shifted = { ...grid4(44), beats: Array.from({ length: 44 }, (_, i) => 1 + i * 0.5) };   // prvni doby 1, 3, 5, 7
+  const out = arrange(lhMelodySong(), 'easy', shifted);
+  for (const [p, t] of [[48, 6], [50, 6.5], [52, 7], [53, 7.5]]) assert.ok(at(out, t, 'L').includes(p), `${p}@${t}: ${out.filter((n) => n.s > 5 && n.s < 8).map((n) => `${n.p}@${n.s}`)}`);
+});
+
+test('snadne: bas se nedrzi pod melodii leve ruky', () => {
+  const out = arrange(lhMelodySong(), 'easy', grid4(44));
+  for (const n of out.filter((n) => n.h === 'L' && n.s < 6 && n.p < 48)) assert.ok(n.e <= 6.001, `bas ${n.p}@${n.s} drzi do ${n.e}`);
+});
+
+test('arrange bere klic kroku i cislo urovne', () => {
+  const { notes } = song();
+  const sig = (out) => out.map((n) => `${n.p}@${n.s.toFixed(3)}${n.h}${n.f}`).join(' ');
+  assert.equal(sig(arrange(notes, 'easy')), sig(arrange(notes, 2)));
+});
+
+test('prstoklad: palec na cerne v akordu stoji 1 bod, v poloze 3, v melodii 5', async () => {
+  const { noteCost } = await import('../web/js/fingering.js');
+  assert.equal(noteCost(1, 70, true), 1);
+  assert.equal(noteCost(1, 70, true, true), 1);
+  assert.equal(noteCost(1, 70, false, true), 3);
+  assert.equal(noteCost(1, 70), 5);
+});
+
+test('prstoklad Levels: palec na C#6 uz od prvni noty (okno na okraji skladby)', () => {
+  const a = [];
+  for (let i = 0; i < 8; i++) a.push({ p: 88, s: i * 0.47, e: i * 0.47 + 0.2 }, { p: 92, s: i * 0.47, e: i * 0.47 + 0.2 }, { p: 85, s: i * 0.47 + 0.23, e: i * 0.47 + 0.43 });
+  fingerHand(a, 'R');
+  // shortcut: posledni nota motivu dostane 2 (za ni uz neni akord, ke kteremu se palec hodi), resit az bude vadit
+  assert.ok(a.filter((n) => n.p === 85).slice(0, -1).every((n) => n.f === 1), a.filter((n) => n.p === 85).map((n) => n.f).join(''));
+});

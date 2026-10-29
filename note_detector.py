@@ -394,7 +394,7 @@ def _flash_ranges(kb: KeyboardLayout) -> np.ndarray:
         a, b = k.x_left, k.x_right
         if k.is_black:
             m = max(1, (b - a) // 4)
-            out.append((a + m, b - m))
+            out.append((a + m, max(a + m + 1, b - m)))      # uzka cerna (nizke rozliseni): aspon 1 px
             continue
         c = (a + b) / 2
         for bl, br in blacks:
@@ -415,30 +415,44 @@ def _band_luma(frame, y1: int, ranges) -> np.ndarray:
 
 
 def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float,
-                 rise: float = 30, keep: float = 100, post_s: float = 0.15) -> List[DetectedNote]:
+                 rise: float = 30, keep: float = 100, post_s: float = 0.15,
+                 min_dur: float = 0.0) -> List[DetectedNote]:
     """
     Noty z pasu tesne nad klavesnici ve videich, kde nota pri dopadu blikne pres 2 klavesy
     na kazdou stranu (Pianella apod.). Zacatek = skok jasu; nota = klavesa, ktera sviti
-    i po zablesku a sviti vic nez oba sousede (zare od vedlejsi noty je slabsi).
-    Opakovany akord nikdy nezhasne, proto konci nota i dalsim skokem jasu.
+    i po zablesku (post_s) a sviti vic nez oba sousede (zare od vedlejsi noty je slabsi).
+    Kratsi nota (staccato) staci, kdyz po zablesku sousede zhasnou a ona jeste sviti.
+    Nota konci zhasnutim nebo dalsim uhozem teze klavesy (opakovany akord nikdy nezhasne);
+    zablesk vedlejsi noty drzenou notu neukonci.
     shortcut: dve sousedni pultonove noty naraz se rozpoznaji jen jako jedna, upravit az bude vadit.
     """
     n, K = g.shape
     post = max(1, int(round(post_s / dt)))
     base = np.percentile(g, 20, axis=0)
+    on = g - base >= keep
     up = np.zeros_like(g, bool)
     up[1:] = g[1:] - g[:-1] > rise
     up[1:] &= ~up[:-1]                       # zablesk trva par snimku - jen prvni
-    notes = []
+    hits = []                                # (klavesa, uhoz, snimek, od ktereho nota urcite sviti)
     for t, k in zip(*np.where(up)):
         tp = min(n - 1, t + post)
-        if g[tp, k] - base[k] < keep:
+        nb = [j for j in (k - 1, k + 1) if 0 <= j < K]
+        if on[tp, k] and g[tp, k] >= max(g[tp, j] for j in nb) - 1:
+            hits.append((k, t, tp))
             continue
-        if g[tp, k] < max(g[tp, max(0, k - 1)], g[tp, min(K - 1, k + 1)]) - 1:
-            continue
-        e = tp
-        while e + 1 < n and g[e + 1, k] - base[k] >= keep and not up[e + 1, k]:
+        # jen klavesa, ktera pred uhozem nesvitila - drzenou notu rozsviti i zablesk souseda
+        short = [f for f in range(t + 1, tp + 1) if on[f, k] and not any(on[f, j] for j in nb)]
+        if short and not on[t - 1, k]:
+            hits.append((k, t, short[0]))
+    hits.sort()
+    notes = []
+    for i, (k, t, f) in enumerate(hits):
+        stop = hits[i + 1][1] if i + 1 < len(hits) and hits[i + 1][0] == k else n   # dalsi uhoz teze klavesy
+        e = min(f, stop - 1)
+        while e + 1 < stop and on[e + 1, k]:
             e += 1
+        if times[e] + dt - times[t] < min_dur:
+            continue
         notes.append(DetectedNote(midi_note=kb.keys[k].midi_note, start_time=round(float(times[t]), 4),
                                   end_time=round(float(times[e] + dt), 4)))
     notes.sort(key=lambda n: (n.start_time, n.midi_note))
@@ -688,11 +702,12 @@ def detect_notes_from_video(video_path: str, config: Optional[DetectorConfig] = 
         flashes[gone] = _band_luma(med, flash_y, flash_rg)
     lit = _changed(colors, 1 / dt, config.lit_threshold)
     hit = _changed(hits, 1 / dt, config.lit_threshold)
-    if lit.mean() > hit.mean():
-        # Synthesia: linie nad klavesou je aktivni aspon tak dlouho jako klavesa (0,3-0,55x).
-        # Klavesy se meni vic nez linie = natocene ruce, ktere klavesy zakryvaji.
+    if hit.mean() < lit.mean() < 4 * hit.mean():
+        # Pomer lit/hit: Synthesia 0,30-0,52 (linie nad klavesou se meni vic nez klavesa), natocene
+        # ruce pres klavesy (Pianella) 1,23 - linie tam blika pri kazdem dopadu. Linie, ktera se
+        # skoro nemeni (staticky filc nad klavesami), neni zablesk: tam se ctou klavesy.
         print("  Klavesy zakryvaji ruce - ctu noty ze zablesku nad klavesnici")
-        notes = _flash_notes(flashes, kb, times, dt)
+        notes = _flash_notes(flashes, kb, times, dt, min_dur=config.min_note_duration)
     else:
         if lit.mean() * 5 < hit.mean():
             print("  Klavesy se v tomto videu nebarvi - ctu noty z linie dopadu")

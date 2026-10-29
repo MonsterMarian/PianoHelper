@@ -61,17 +61,12 @@ export const STEP_ORDER = Object.keys(STEPS);
  * Melodie = nejvyssi ton kazdeho nastupu prave ruky ("skyline", Uitdenbogerd & Zobel 1999).
  * Ozdoby (kratsi nez 1/4 doby, ktere hned prechazi na sousedni ton) se vynechaji.
  * Nota drzi do dalsiho tonu melodie (legato), nejdele vsak puvodni delku.
- * Takt, kde prava ruka mlci a leva hraje aspon 3 tony (predehra, mezihra), dostane melodii
- * z horniho hlasu leve ruky - jinak by snadne verze v tu chvili mlcely. Zustane v leve ruce.
+ * Usek aspon takt dlouhy, kde prava ruka mlci a leva ma aspon 3 nastupy (predehra, mezihra), dostane
+ * melodii z horniho hlasu leve ruky - jinak by snadne verze v tu chvili mlcely. Zustane v leve ruce.
  */
 export function extractMelody(notes, grid) {
-  const beats = beatTimes(grid, songEnd(notes));
-  const lhBars = [];
-  for (let i = 0; i + grid.meter < beats.length; i += grid.meter) {
-    const a = beats[i], b = beats[i + grid.meter], inBar = (n) => n.s >= a - 0.03 && n.s < b - 0.03;
-    if (!notes.some((n) => n.h !== 'L' && inBar(n)) && notes.filter((n) => n.h === 'L' && inBar(n)).length >= 3) lhBars.push([a - 0.03, b - 0.03]);
-  }
-  const voice = notes.filter((n) => n.h !== 'L' || lhBars.some(([a, b]) => n.s >= a && n.s < b));
+  const lhSpans = lhOnlySpans(notes, grid);
+  const voice = notes.filter((n) => n.h !== 'L' || lhSpans.some(([a, b]) => n.s >= a && n.s < b));
   const tops = onsetGroups(voice).map((g) => g.notes.reduce((a, b) => (b.p > a.p ? b : a)));
   const kept = [];
   for (let i = 0; i < tops.length; i++) {
@@ -91,6 +86,23 @@ export function extractMelody(notes, grid) {
   });
 }
 
+// Useky, kde prava ruka mlci aspon takt (od konce posledniho tonu, ne podle taktovych car -
+// odhad prvni doby muze byt posunuty) a leva ma aspon 3 nastupy.
+function lhOnlySpans(notes, grid) {
+  const rh = notes.filter((n) => n.h !== 'L').sort((a, b) => a.s - b.s);
+  const lh = notes.filter((n) => n.h === 'L');
+  const spans = [];
+  let busy = -Infinity;
+  for (const n of [...rh, { s: Infinity, e: Infinity }]) {
+    if (n.s - busy >= 0.9 * grid.beat * grid.meter) {
+      const span = [busy - 0.05, n.s - 0.03];
+      if (onsetGroups(lh.filter((m) => m.s >= span[0] && m.s < span[1])).length >= 3) spans.push(span);
+    }
+    busy = Math.max(busy, n.e);
+  }
+  return spans;
+}
+
 /**
  * Zjednodusena melodie (uroven 1): v kazde dobe jen jeden ton - ten, ktery zacina na dobe a je
  * nejdelsi (hlavni ton); rychle behy, prirazy a synkopy mezi dobami zmizi. Ton drzi do dalsiho.
@@ -101,22 +113,31 @@ export function simplifyMelody(melody, grid, end) {
   // u rychlych skladeb jeden ton na pul taktu / takt: mezi tony aspon 0.6 s
   let step = 1;
   while (step < grid.meter && step * T < 0.6) step = grid.meter % 2 === 0 && step * 2 <= grid.meter ? step * 2 : grid.meter;
+  const minGap = Math.max(0.55, 0.75 * step * T);
   const kept = [];
   for (let i = 0; i + step < beats.length; i += step) {
     const a = beats[i] - 0.15 * T, b = beats[i + step] - 0.15 * T;
-    let best = null;
-    const prev = kept[kept.length - 1];
-    for (const n of melody) {
-      if (n.s < a || n.s >= b) continue;
-      // dlouhy ton na konci predchoziho okna + ton na zacatku tohoto = dva tony tesne po sobe
-      if (prev && n.s - prev.s < Math.max(0.55, 0.75 * step * T)) continue;
-      const score = (Math.abs(n.s - beats[i]) < 0.15 * T ? 1 : 0) + Math.min(n.e, beats[i + step]) - n.s;
-      if (!best || score > best.score) best = { n, score };
+    const cands = melody.filter((n) => n.s >= a && n.s < b).map((n) => {
+      const onBeat = Math.abs(n.s - beats[i]) < 0.15 * T;
+      return { n, onBeat, score: (onBeat ? 1 : 0) + Math.min(n.e, beats[i + step]) - n.s };
+    });
+    const top = (cs) => cs.reduce((x, c) => (!x || c.score > x.score ? c : x), null);
+    // dlouhy ton na konci predchoziho okna + ton na zacatku tohoto = dva tony tesne po sobe
+    const fits = (c, before) => !before || c.n.s - before.n.s >= minGap;
+    const prev = kept[kept.length - 1], free = top(cands);
+    let best = top(cands.filter((c) => fits(c, prev)));
+    if (free?.onBeat && prev && !prev.onBeat && !fits(free, prev)) {
+      // ton na dobe vytlaci predchozi ton mimo dobu (predtakt), ne naopak; predchozi okno si
+      // vezme jiny svuj ton, pokud nejaky neni tesne u sousedu
+      kept.pop();
+      const alt = top(prev.cands.filter((c) => fits(c, kept[kept.length - 1]) && fits(free, c)));
+      if (alt) kept.push(alt);
+      best = free;
     }
-    if (best) kept.push(best.n);
+    if (best) kept.push({ ...best, cands });
   }
-  return kept.map((n, i) => {
-    const next = kept[i + 1];
+  return kept.map(({ n }, i) => {
+    const next = kept[i + 1]?.n;
     const e = next ? Math.max(n.s + 0.1, Math.min(Math.max(n.e, n.s + T * step * 0.9), next.s - 0.02)) : n.e;
     return { p: n.p, s: n.s, e, h: n.h === 'L' ? 'L' : 'R' };
   });
@@ -135,17 +156,36 @@ function placeInRange(pc, lo, hi, target) {
  */
 function core(notes, grid) {
   const melody = extractMelody(notes, grid);
-  const lh = [];
-  let last = -Infinity;
   const lhMel = melody.filter((m) => m.h === 'L');
-  for (const g of onsetGroups(notes.filter((n) => n.h === 'L'))) {
-    if (g.t - last < grid.beat / 2 - 0.03) continue;
-    if (lhMel.some((m) => m.s < g.t + 0.03 && m.e > g.t + 0.03)) continue;          // tady leva hraje melodii
+  const gs = onsetGroups(notes.filter((n) => n.h === 'L'))
+    .filter((g) => !lhMel.some((m) => m.s < g.t + 0.03 && m.e > g.t + 0.03));     // tady leva hraje melodii
+  const lh = sparse(gs, grid.beat / 2 - 0.03, beatTimes(grid, songEnd(notes)), grid).flatMap((g) => {
     const ns = [...g.notes].sort((a, b) => a.p - b.p);
-    lh.push(...new Set([ns[0], ns[ns.length - 1]]));
-    last = g.t;
-  }
+    return [...new Set([ns[0], ns[ns.length - 1]])];
+  });
   return [...melody, ...lh.map((n) => ({ ...n }))];
+}
+
+// Metricka vaha casu: 1. doba taktu 3, doba 2, osmina 1, jinak 0.
+function weight(t, beats, grid) {
+  const tol = 0.12 * grid.beat;
+  let i = 0;
+  while (i + 1 < beats.length && beats[i + 1] <= t + tol) i++;
+  if (Math.abs(t - beats[i]) < tol) return i % grid.meter === 0 ? 3 : 2;
+  return i + 1 < beats.length && Math.abs(t - (beats[i] + beats[i + 1]) / 2) < tol ? 1 : 0;
+}
+
+// Nastupy aspon gap od sebe. Z blizkych nastupu zustane ten na silnejsi dobe - predtakt
+// (sestnactina pred dobou) nesmi vytlacit akord na dobe.
+function sparse(groups, gap, beats, grid) {
+  const kept = [];
+  for (const g of groups) {
+    const w = weight(g.t, beats, grid);
+    while (kept.length && g.t - kept[kept.length - 1].t < gap && w > kept[kept.length - 1].w) kept.pop();
+    if (kept.length && g.t - kept[kept.length - 1].t < gap) continue;
+    kept.push({ ...g, w });
+  }
+  return kept;
 }
 
 /**
@@ -155,18 +195,18 @@ function core(notes, grid) {
  */
 function thin(notes, grid) {
   const q = grid.beat / 4;
+  const beats = beatTimes(grid, songEnd(notes));
   const out = [];
   for (const h of ['L', 'R']) {
     const gs = onsetGroups(notes.filter((n) => (h === 'L') === (n.h === 'L')));
-    let last = -Infinity;
-    gs.forEach((g, i) => {
+    const plain = gs.filter((g, i) => {
       const next = gs[i + 1], n0 = g.notes[0];
-      const ornament = g.notes.length === 1 && next && next.t - g.t < q && n0.e - n0.s < q &&
-        next.notes.some((n) => Math.abs(n.p - n0.p) <= 2);
-      if (ornament || g.t - last < grid.beat / 3 - 0.03) return;
-      last = g.t;
-      out.push(...[...g.notes].sort((a, b) => (h === 'R' ? b.p - a.p : a.p - b.p)).slice(0, 3));
+      return !(g.notes.length === 1 && next && next.t - g.t < q && n0.e - n0.s < q &&
+        next.notes.some((n) => Math.abs(n.p - n0.p) <= 2));                          // ozdoba
     });
+    for (const g of sparse(plain, grid.beat / 3 - 0.03, beats, grid)) {
+      out.push(...[...g.notes].sort((a, b) => (h === 'R' ? b.p - a.p : a.p - b.p)).slice(0, 3));
+    }
   }
   return out.map((n) => ({ ...n }));
 }
@@ -202,9 +242,10 @@ function leftHandSimple(notes, melody, grid, end) {
       out.push({ p: bass.p, s: bass.s, e: Math.max(bass.e, bass.s + 0.1), h: 'L' });
     }
   }
-  // preskocena kratka zmena akordu nesmi nechat diru: ton drzi do dalsiho basu, nejdele takt
+  // preskocena kratka zmena akordu nesmi nechat diru: ton drzi do dalsiho basu (nebo melodie
+  // v leve ruce), nejdele takt
   const bar = grid.beat * grid.meter;
-  const starts = [...new Set(out.map((n) => n.s))].sort((x, y) => x - y);
+  const starts = [...new Set([...out, ...melody.filter((m) => m.h === 'L')].map((n) => n.s))].sort((x, y) => x - y);
   for (const n of out) {
     const next = starts.find((t) => t > n.s + 1e-6) ?? Infinity;
     n.e = Math.max(n.e, Math.min(next - 0.02, n.s + bar, end));
@@ -272,14 +313,15 @@ function advanced(notes, grid, end, { octaves }) {
 }
 
 /**
- * Vrati noty pro danou uroven (1-5 podle levelsFor), kazda s rukou (h), prstem (f)
- * a pripadne moved/added. Vstupni noty se nemeni.
+ * Vrati noty pro danou uroven, kazda s rukou (h), prstem (f) a pripadne moved/added.
+ * level = klic kroku ('easy', 'original'...), nebo cislo 1-5 podle levelsFor - to se pak
+ * obtiznost pocita znovu, proto kdo ma urovne skladby, preda klic. Vstupni noty se nemeni.
  */
 export function arrange(notes, level, grid = null) {
   const base = splitHands(clone(notes));
   const end = songEnd(base);
   grid = grid || estimateGrid(base);
-  const step = levelsFor(base)[level - 1].key;
+  const step = typeof level === 'string' ? level : levelsFor(base)[level - 1].key;
   let out;
   if (step === 'beginner') out = simplifyMelody(extractMelody(base, grid), grid, end);
   else if (step === 'easy') {

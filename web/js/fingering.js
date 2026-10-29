@@ -91,7 +91,7 @@ function stepCostInner(fa, qa, pa, fb, qb, pb, gap, shape, still) {
 export function noteCost(f, p, inChord = false, still = false) {
   let c = 0;
   if (f === 4 || f === 5) c += 0.5;          // pravidlo 6: slabe prsty (Parncutt: 1; 0.5 = radsi poloha nez prekladani)
-  if (f === 1 && isBlack(p)) c += inChord || still ? 3 : 5;               // pravidlo 10: palec na cerne
+  if (f === 1 && isBlack(p)) c += inChord ? 1 : still ? 3 : 5;             // pravidlo 10: palec na cerne
   if (f === 5 && isBlack(p) && !inChord) c += 1;                          // malicek na cerne
   return c;
 }
@@ -172,7 +172,9 @@ export function fingerHand(notes, hand) {
   // Ruka stoji v poloze, kdyz se okoli (+-3 udalosti do 1,5 s) vejde do peti prstu (<= 7 pultonu).
   // Klavirista pak nepodklada a palec da klidne na cernou (Levels: G#5 F#5 E5 C#5 = 5 4 3 2).
   events.forEach((ev, i) => {
-    const near = events.slice(Math.max(0, i - 3), i + 4).filter((o) => Math.abs(o.t - ev.t) < 1.5);
+    // na okraji (zacatek skladby, konec) se okno posune dovnitr, at ma taky 7 udalosti
+    const a = Math.max(0, Math.min(i - 3, events.length - 7));
+    const near = events.slice(a, a + 7).filter((o) => Math.abs(o.t - ev.t) < 1.5);
     const qs = near.flatMap((o) => o.qs);
     // aspon 6 udalosti: zacatek stupnice (C D E F) se taky vejde do peti prstu, ale pokracuje dal
     ev.still = near.length >= 6 && Math.max(...qs) - Math.min(...qs) <= 7;

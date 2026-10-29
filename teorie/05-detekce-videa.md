@@ -55,11 +55,20 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
   ~1/60 výšky obrazu ji smaže, takže se jako pás bílých kláves najdou klávesy. Obraz tmavne ke
   krajům (vinětace), proto se sloupce před hledáním kláves zesvětlí podle obálky jasu bílých
   kláves (nejvýš 4×).
-- **Poznání:** u Synthesie se linka nad klávesou mění 2–3× víc než klávesa. Když se klávesy mění
-  víc než linka, zakrývají je ruce a noty se čtou ze záblesků nad klávesnicí.
+- **Poznání:** u Synthesie se linka nad klávesou mění 2–3× víc než klávesa (poměr změn
+  klávesy / linky 0,30–0,52 u všech 18 Synthesia videí v knihovně). Když se klávesy mění víc
+  než linka, ale nejvýš 4× víc (Levels: 1,23), zakrývají je ruce a noty se čtou ze záblesků nad
+  klávesnicí. Linka, která se skoro nemění (statický filc nad klávesami, noty dopadají na něj),
+  záblesky nemá – tam se čtou klávesy. Dřív takové video dalo 0 not.
 - **Záblesk** při dopadu rozsvítí i 2 sousední klávesy na každou stranu, ale jen na 3 snímky.
   Nota = skok jasu (začátek) + klávesa, která svítí ještě 0,15 s potom a víc než oba sousedé.
-  Opakovaný akord nezhasne, proto nota končí i dalším skokem jasu. Bílá klávesa se měří jen
+  Kratší nota (staccato, šestnáctiny) stačí, když po záblesku sousedé zhasnou a ona ještě svítí;
+  kratší než `min_note_duration` se zahodí. Opakovaný akord nezhasne, proto nota končí i dalším
+  úhozem **téže** klávesy – záblesk sousední noty drženou notu neukončí (dřív ji usekl)
+  a rychle opakované tóny se nepřekrývají. Krátká nota se bere jen na klávese, která před
+  úhozem nesvítila (jinak by záblesk souseda rozdělil drženou notu). Levels po opravách
+  (review 2026-10-29): 2524 → 2631 not (+107 krátkých), noty přesahující další úhoz téže
+  klávesy 702 → 0; všech 18 Synthesia videí beze změny počtu not. Bílá klávesa se měří jen
   v části, nad kterou nedopadají černé noty. Pozor na hranice: černá klávesa, která začíná o pixel
   vedle hranice bílé, se dřív nevyřízla a H5 pak svítilo i od noty A♯5 a obdélníku na hranici
   H5/C6 – z toho bylo 36 falešných C6. Teď se černá odřízne podle toho, na které straně středu
@@ -78,6 +87,8 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
 
 - Potřebuje klávesnici ve videu, která se barví, nebo noty dopadající na linii (i u natočeného
   piana). Videa bez padajících not převádí `--audio` (basic-pitch), což je méně přesné.
+- Záblesky: krátký úhoz vedle držené noty, která svítí slaběji, ji pořád rozdělí na dvě
+  (při kontrole 0,15 s po úhozu svítí držená nota víc než zhaslý soused).
 - Záblesky: dvě sousední půltónové noty naráz se poznají jako jedna; bílá klávesa mezi dvěma
   černými notami těsně po sobě občas vyjde navíc (< 1 % not). Pravidlo „bílá mezi dvěma
   hranými černými musí svítit víc než ony“ jsme zkusili a zahodili: záblesk samotné noty A
