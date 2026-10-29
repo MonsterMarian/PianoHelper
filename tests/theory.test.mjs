@@ -6,6 +6,7 @@ import { estimateGrid, matchChord, detectKey, chordTrack } from '../web/js/analy
 import { fingerHand } from '../web/js/fingering.js';
 import { splitHands, rebalanceHands } from '../web/js/hands.js';
 import { arrange } from '../web/js/arrange.js';
+import * as arrangeMod from '../web/js/arrange.js';
 
 const seq = (ps, dt = 0.3) => ps.map((p, i) => ({ p, s: i * dt, e: i * dt + dt * 0.9 }));
 const fingers = (ps, hand = 'R') => fingerHand(seq(ps), hand).map((n) => n.f).join('');
@@ -530,4 +531,19 @@ test('pokrocile: oktava rozkladu by narazila do melodie -> jiny ton akordu, zadn
   }
   const lhAdded = arrange(notes, 'advanced', grid4(40)).filter((n) => n.h === 'L' && n.added && n.s < 2);
   assert.deepEqual(lhAdded.map((n) => n.p), [55, 52, 55, 55, 52, 55], lhAdded.map((n) => `${n.p}@${n.s}`).join(' '));
+});
+
+test('melodie leve ruky: dohra s arpeggiovanym akordem ani kratky predtakt nejsou melodie, bas jen jednou', () => {
+  const grid = { ...grid4(40), beats: Array.from({ length: 40 }, (_, i) => 1 + i * 0.5) };
+  const notes = [];
+  for (let i = 0; i < 7; i++) notes.push({ p: 72 + (i % 3), s: 1 + i * 0.5, e: 1.45 + i * 0.5, h: 'R' });
+  for (let i = 0; i < 3; i++) notes.push({ p: 48, s: 1 + i, e: 1.95 + i, h: 'L' });
+  [36, 43, 48].forEach((p, i) => notes.push({ p, s: 4.5 + i * 0.06, e: 6.5, h: 'L' }));      // arpeggiovany zaverecny akord
+  [43, 45, 47].forEach((p, i) => notes.push({ p, s: 0.7 + i * 0.1, e: 0.8 + i * 0.1, h: 'L' })); // predtakt pred pravou rukou
+  const { extractMelody } = arrangeMod;
+  assert.ok(extractMelody(notes, grid).every((n) => n.h === 'R'));
+  const easy = arrange(notes, 'easy', grid).filter((n) => n.h === 'L');
+  assert.ok(easy.some((n) => n.p === 36 && Math.abs(n.s - 4.5) < 0.01 && n.e > 6.4), 'zaverecny bas drzi');
+  const keys = easy.map((n) => `${n.p}@${n.s}`);
+  assert.equal(new Set(keys).size, keys.length, `ton dvakrat: ${keys}`);
 });

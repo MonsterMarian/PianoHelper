@@ -56,7 +56,9 @@ a ty jen nad levou rukou, aby se ruce nesrazily.
    v těch taktech snadné verze mlčely (Vivid Vice, Ma Meilleure Ennemie: 7 taktů). Bas se tam
    nepřidává a bas před pauzou se nedrží pod melodii. Pauza se měří od konce posledního tónu
    pravé ruky, ne po taktech: odhad první doby bývá posunutý a pauza by pak padla přes dva
-   „takty“. Počítají se nástupy, ne tóny – jeden držený akord není melodie.
+   „takty“. Počítají se nástupy aspoň ¼ doby od sebe, ne tóny – držený ani arpeggiovaný akord
+   není melodie. Předehra se měří od začátku skladby a dohra do konce, takže i tam musí pauza
+   pravé ruky trvat aspoň takt. Tón, který hraje levá ruka jako melodii, se nevezme znovu jako bas.
 4. **Ozdoby pryč:** tón kratší než ¼ doby, po kterém do ¼ doby následuje sousední tón
    (o 1–2 půltóny), je příraz nebo trylek.
 5. **Legato:** tón drží do dalšího tónu melodie, nejdéle však původní délku. Rytmus se tedy

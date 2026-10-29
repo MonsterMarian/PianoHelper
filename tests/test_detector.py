@@ -208,6 +208,13 @@ def test_flash_held_note_and_neighbour():
     g[22:25, 1:8] = 250
     g[25:35, [2, 6]] = 240
     assert _flash_found(g) == [(64, 10, 41), (62, 22, 35), (66, 22, 35)], _flash_found(g)
+    # totez na kraji klaviatury (okno jen 4 klavesy): drzena nejnizsi klavesa se taky nedeli
+    g = np.full((60, 12), 70.0)
+    g[10:13, 0:3] = 250
+    g[13:41, 0] = 200
+    g[22:25, 0:7] = 250
+    g[25:35, 2] = 240
+    assert _flash_found(g) == [(60, 10, 41), (62, 22, 35)], _flash_found(g)
 
 
 def test_flash_fast_repeats_do_not_overlap():

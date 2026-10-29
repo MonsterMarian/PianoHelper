@@ -422,8 +422,11 @@ def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float
     na kazdou stranu (Pianella apod.). Zacatek = skok jasu; nota = klavesa, ktera sviti
     i po zablesku (post_s) a sviti vic nez oba sousede (zare od vedlejsi noty je slabsi).
     Kratsi nota (staccato) staci, kdyz po zablesku sousede zhasnou a ona jeste sviti.
-    Nota konci zhasnutim nebo dalsim uhozem teze klavesy (opakovany akord nikdy nezhasne);
-    zablesk vedlejsi noty drzenou notu neukonci.
+    Nota konci zhasnutim nebo dalsim uhozem teze klavesy (opakovany akord nikdy nezhasne).
+    Zablesk souseda drzenou notu neukonci, kdyz soused po zablesku sviti vic nez ona, nebo kdyz
+    je zablesk sirsi nez jeden uhoz.
+    shortcut: drzenou notu, ktera po uzkem zablesku souseda sviti nejvic, to rozdeli (vypada stejne
+    jako jeji opakovany uhoz; stred zablesku je na Levels neodlisuje), resit az s dalsimi videi.
     shortcut: dve sousedni pultonove noty naraz se rozpoznaji jen jako jedna, upravit az bude vadit.
     """
     n, K = g.shape
@@ -440,8 +443,10 @@ def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float
         nb = [j for j in (k - 1, k + 1) if 0 <= j < K]
         if on[tp, k] and g[tp, k] >= max(g[tp, j] for j in nb) - 1:
             # svitici klavesa v zablesku sirsim nez jeden uhoz (5 klaves) = zare souseda, drzena
-            # nota pokracuje (Levels: takove "uhozy" zni jako nahoda, 19 %; ostatni 42 %)
-            if not (on[t - 1, k] and up[t, max(0, k - 3):k + 4].sum() >= 6):
+            # nota pokracuje (Levels: takove "uhozy" zni jako nahoda, 19 %; ostatni 42 %).
+            # Na kraji klaviatury je okno kratsi nez 7 klaves -> stejny podil (6/7).
+            win = up[t, max(0, k - 3):k + 4]
+            if not (on[t - 1, k] and win.sum() >= 6 / 7 * len(win)):
                 hits.append((k, t, tp))
             continue
         # jen klavesa, ktera pred uhozem nesvitila - drzenou notu rozsviti i zablesk souseda.

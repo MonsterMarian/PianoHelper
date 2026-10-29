@@ -87,16 +87,21 @@ export function extractMelody(notes, grid) {
 }
 
 // Useky, kde prava ruka mlci aspon takt (od konce posledniho tonu, ne podle taktovych car -
-// odhad prvni doby muze byt posunuty) a leva ma aspon 3 nastupy.
+// odhad prvni doby muze byt posunuty; predehra od zacatku skladby, dohra do konce) a leva ma
+// aspon 3 nastupy aspon 1/4 doby od sebe (arpeggiovany akord je jeden nastup).
 function lhOnlySpans(notes, grid) {
   const rh = notes.filter((n) => n.h !== 'L').sort((a, b) => a.s - b.s);
   const lh = notes.filter((n) => n.h === 'L');
   const spans = [];
-  let busy = -Infinity;
-  for (const n of [...rh, { s: Infinity, e: Infinity }]) {
+  let busy = Math.min(...notes.map((n) => n.s));
+  for (const n of [...rh, { s: songEnd(notes), e: Infinity }]) {
     if (n.s - busy >= 0.9 * grid.beat * grid.meter) {
       const span = [busy - 0.05, n.s - 0.03];
-      if (onsetGroups(lh.filter((m) => m.s >= span[0] && m.s < span[1])).length >= 3) spans.push(span);
+      let count = 0, last = -Infinity;
+      for (const g of onsetGroups(lh.filter((m) => m.s >= span[0] && m.s < span[1]))) {
+        if (g.t - last >= grid.beat / 4) { count++; last = g.t; }
+      }
+      if (count >= 3) spans.push(span);
     }
     busy = Math.max(busy, n.e);
   }
@@ -222,6 +227,9 @@ function leftHandSimple(notes, melody, grid, end) {
   const chords = chordTrack(notes, grid, end);
   const beats = beatTimes(grid, end);
   const out = [];
+  // ton, ktery uz hraje leva ruka jako melodii (napr. predtakt tesne pred dobou), neni zaroven bas
+  const lhMel = new Set(melody.filter((m) => m.h === 'L').map((m) => `${m.p}@${m.s}`));
+  const pool = notes.filter((n) => !lhMel.has(`${n.p}@${n.s}`));
   // ton na kazdy takt + zmena akordu delsi nez 2 doby.
   // Doby jsou pole casu (tempo se muze menit), beats[0] je prvni doba taktu.
   const unit = grid.meter;
@@ -237,7 +245,7 @@ function leftHandSimple(notes, melody, grid, end) {
       if (melody.some((m) => m.h === 'L' && m.s < b && m.e > a)) continue;     // melodii hraje leva ruka
       const mel = melody.filter((m) => m.s < b && m.e > a).map((m) => m.p);
       const ceiling = (mel.length ? Math.min(...mel) : 72) - 3;
-      const bass = bassFor(notes, a, b, ceiling, 0.25 * grid.beat);
+      const bass = bassFor(pool, a, b, ceiling, 0.25 * grid.beat);
       if (!bass || out.some((o) => o.s === bass.s)) continue;
       out.push({ p: bass.p, s: bass.s, e: Math.max(bass.e, bass.s + 0.1), h: 'L' });
     }
