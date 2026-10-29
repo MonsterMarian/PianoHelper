@@ -62,30 +62,36 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
   záblesky nemá – tam se čtou klávesy. Dřív takové video dalo 0 not.
 - **Záblesk** při dopadu rozsvítí i 2 sousední klávesy na každou stranu, ale jen na 3 snímky.
   Nota = skok jasu (začátek) + klávesa, která svítí ještě 0,15 s potom a víc než oba sousedé.
-  Kratší nota (staccato, šestnáctiny) stačí, když po záblesku sousedé zhasnou a ona ještě svítí;
-  kratší než `min_note_duration` se zahodí. Opakovaný akord nezhasne, proto nota končí i dalším
-  úhozem **téže** klávesy – záblesk sousední noty drženou notu neukončí (dřív ji usekl)
-  a rychle opakované tóny se nepřekrývají. Krátká nota se bere jen na klávese, která před
-  úhozem nesvítila (jinak by záblesk souseda rozdělil drženou notu), a ne na bílé klávese
-  1–3 snímky po úhozu černé vedle: to je záře té černé noty. Klávesa, která už svítí, se
-  v záblesku širším než jeden úhoz (aspoň 6 ze 7 kláves okolo naráz) nebere jako nový úhoz:
-  rozsvítil ji soused a držená nota pokračuje. Levels po opravách (review 2026-10-29):
-  2524 → 2456 not (+65 krátkých, −133 rozdělených držených), noty přesahující další úhoz téže
-  klávesy 702 → 0; všech 18 Synthesia videí beze změny počtu not.
-
-  **Kontrola proti zvuku** (`audio.m4a` vedle videa): při nástupu noty se změří nárůst energie
-  na jejích prvních 4 harmonických a vydělí 90. percentilem téže výšky v náhodných chvílích
-  bez nástupu. Nota „zní“, když je nad náhodou a silnější než oba půltóny vedle. Původní noty
-  Levels 44 %, tytéž posunuté o půltón 13 % (o 3 půltóny 23 %), takže metrika rozlišuje, ale
-  jen na úrovni skupin. Krátké noty ze zálohy: bez pravidla o záři černé 35 % (bílé 17 % =
-  úroveň falešných, černé 56 %), s ním 48 %. „Úhozy“ na už svítící klávese: v záblesku přes
-  6–7 kláves 19 % (133 not, úroveň falešných), v užším 42 % – jiný znak obrazu (velikost
-  skoku, jas proti sousedům, střed záblesku) je neodděloval. Po všech opravách zní 45 % not
-  Levels (dřív 44 %). Bílá klávesa se měří jen
-  v části, nad kterou nedopadají černé noty. Pozor na hranice: černá klávesa, která začíná o pixel
+  Opakovaný akord nezhasne, proto nota končí i dalším úhozem **téže** klávesy – záblesk
+  sousední noty, který potom svítí víc, drženou notu neukončí (dřív ji usekl) a rychle
+  opakované tóny se nepřekrývají (Levels: 702 → 0 přesahů). Bílá klávesa se měří jen v části,
+  nad kterou nedopadají černé noty. Pozor na hranice: černá klávesa, která začíná o pixel
   vedle hranice bílé, se dřív nevyřízla a H5 pak svítilo i od noty A♯5 a obdélníku na hranici
   H5/C6 – z toho bylo 36 falešných C6. Teď se černá odřízne podle toho, na které straně středu
   bílé leží. Kontrola proti zvuku: 98,1 % → 99,3 % not zní, falešných 49 → 17.
+
+### Kontrola proti zvuku (`tools/eval_detekce.py`)
+
+Zvuková stopa videa se převede na noty knihovnou **basic-pitch** (na Pythonu 3.14 nejde, proto
+zvlášť v `output/venv-bp` s Pythonem 3.10; postup v hlavičce nástroje) a noty z obrazu se s nimi
+spárují podle výšky a začátku (±50 ms, po odečtení posunu obrazu proti zvuku). Vychází přesnost
+(kolik detekovaných not je ve zvuku) a úplnost (kolik not ze zvuku detekce našla) – **po notách**.
+basic-pitch sám chybuje, takže čísla slouží hlavně k porovnání dvou verzí na stejném videu.
+
+| video | posun obrazu | přesnost | úplnost |
+|---|---|---|---|
+| Fourth of July (Synthesia, kontrola nástroje) | −96 ms | 99,2 % | 59,4 % (EASY verze nehraje vše, co je slyšet) |
+| Levels, natočené piano | −130 ms | 59,1 % | 64,0 % |
+
+Co tím vyšlo na Levels (2026-10-29): dvě pravidla, která jsme přidali podle hrubší metriky
+(nárůst energie na harmonických), detekci **zhoršila** a jsou pryč:
+
+- záloha pro krátké noty (klávesa svítí jen pár snímků po záblesku): 65 not, ve zvuku 5,
+- sloučení držené noty se „širokým“ zábleskem souseda: ze 133 zahozených úhozů 91 ve zvuku je
+  (úplnost 64,3 % → 60,4 %).
+
+Parametry záblesků (0,15 s po úhozu, jas +100, skok +30) jsou na plató: mřížka 0,1–0,2 s × 80–120
+× 20–40 dá F1 nejvýš 0,615 proti 0,614; 0,2 s je výrazně horší (0,47).
 
 ## Výsledky
 
@@ -93,21 +99,24 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
 |---|---|---|---|---|
 | Fourth of July (UVnXmLGu4cI) | černé pozadí, popisky pod klávesami, 2 barvy | E2–D6, vzor 100 % | 734, ruce L 172 / R 557 | ~30 s / 5,5 min videa |
 | Ma Meilleure Ennemie (SFyKbYbpHkc) | obrázek na pozadí, poloprůhledná klávesnice, krátké noty s písmenem | A2–F♯6, vzor 100 % | 1138 | ~40 s / 2,5 min |
-| Avicii – Levels, Pianella (PSolYNrEiWc) | natočené piano s rukama, vinětace, záblesky | A0–C8, vzor 100 % | 2456 (po review 2026-10-29); kontrola proti zvuku: 99 % not zní | ~1 min / 3,5 min |
+| Avicii – Levels, Pianella (PSolYNrEiWc) | natočené piano s rukama, vinětace, záblesky | A0–C8, vzor 100 % | 2524; proti zvuku (basic-pitch) přesnost 59 %, úplnost 64 % | ~1 min / 3,5 min |
 | syntetické (test) | známé noty | E2–D6 | 12/12, začátky ±1 snímek, ruce 12/12 | 1 s |
 
 ## Omezení
 
 - Potřebuje klávesnici ve videu, která se barví, nebo noty dopadající na linii (i u natočeného
   piana). Videa bez padajících not převádí `--audio` (basic-pitch), což je méně přesné.
-- Záblesky: držená nota se pořád rozdělí, když ji rozsvítí úzký záblesk jediného souseda
-  (do 5 kláves) – to vypadá stejně jako její vlastní opakovaný úhoz. Levels: ze zbylých 385
-  takových úhozů zní 42 % (skutečné 44 %), takže rozdělených je odhadem jen pár procent.
+- Záblesky: noty kratší než ~0,15 s se nenajdou (po záblesku už nesvítí). Pokus je dohledat
+  přidával hlavně falešné noty (viz kontrola proti zvuku).
+- Záblesky: držená nota, kterou rozsvítí záblesk souseda a pak svítí nejvíc, se rozdělí na dvě.
+  Z obrazu to od opakovaného úhozu odlišit nejde a zvuk říká, že většina takových úhozů je
+  skutečná, proto se nic neslučuje.
 - Záblesky: dvě sousední půltónové noty naráz se poznají jako jedna. Změřeno na Levels
   (2026-10-29): 294 kandidátů (úhoz, který svítí, ale soused o půltón uhozený naráz svítí víc)
   ve zvuku „zní“ stejně často jako tatáž chvíle posunutá o 3 půltóny (46 % / 45 %; přijaté
   noty 58 % / 35 %), takže to nejsou ztracené noty; jen 29 kandidátů s velkým rozdílem jasu
-  ukazuje signál (45 % / 24 %, ~1 % not) – na pravidlo z jednoho videa málo; bílá klávesa mezi dvěma
+  ukazuje signál (45 % / 24 %, ~1 % not) – na pravidlo z jednoho videa málo (měřeno ještě
+  hrubší metrikou, s basic-pitch to stojí za přeměření); bílá klávesa mezi dvěma
   černými notami těsně po sobě občas vyjde navíc (< 1 % not). Pravidlo „bílá mezi dvěma
   hranými černými musí svítit víc než ony“ jsme zkusili a zahodili: záblesk samotné noty A
   rozsvítí i G♯ a A♯, takže by mazalo skutečná A (83 skutečných not za 1 falešnou). Větší

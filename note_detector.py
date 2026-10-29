@@ -421,12 +421,12 @@ def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float
     Noty z pasu tesne nad klavesnici ve videich, kde nota pri dopadu blikne pres 2 klavesy
     na kazdou stranu (Pianella apod.). Zacatek = skok jasu; nota = klavesa, ktera sviti
     i po zablesku (post_s) a sviti vic nez oba sousede (zare od vedlejsi noty je slabsi).
-    Kratsi nota (staccato) staci, kdyz po zablesku sousede zhasnou a ona jeste sviti.
-    Nota konci zhasnutim nebo dalsim uhozem teze klavesy (opakovany akord nikdy nezhasne).
-    Zablesk souseda drzenou notu neukonci, kdyz soused po zablesku sviti vic nez ona, nebo kdyz
-    je zablesk sirsi nez jeden uhoz.
-    shortcut: drzenou notu, ktera po uzkem zablesku souseda sviti nejvic, to rozdeli (vypada stejne
-    jako jeji opakovany uhoz; stred zablesku je na Levels neodlisuje), resit az s dalsimi videi.
+    Nota konci zhasnutim nebo dalsim uhozem teze klavesy (opakovany akord nikdy nezhasne);
+    zablesk souseda, ktery po zablesku sviti vic, drzenou notu neukonci.
+    Zkousene a zahozene podle kontroly proti zvuku (tools/eval_detekce.py, Levels): zaloha pro
+    kratke noty (65 not, ve zvuku 5) a slouceni drzene noty se sirokym zableskem souseda (ze 133
+    "falesnych" uhozu 91 ve zvuku je).
+    shortcut: noty kratsi nez post_s (~0,15 s) se nenajdou, upravit az s presnejsi referenci.
     shortcut: dve sousedni pultonove noty naraz se rozpoznaji jen jako jedna, upravit az bude vadit.
     """
     n, K = g.shape
@@ -436,25 +436,12 @@ def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float
     up = np.zeros_like(g, bool)
     up[1:] = g[1:] - g[:-1] > rise
     up[1:] &= ~up[:-1]                       # zablesk trva par snimku - jen prvni
-    black = [kk.midi_note % 12 in (1, 3, 6, 8, 10) for kk in kb.keys]
-    hits = []                                # (klavesa, uhoz, snimek, od ktereho nota urcite sviti)
+    hits = []                                # (klavesa, uhoz, snimek po zablesku)
     for t, k in zip(*np.where(up)):
         tp = min(n - 1, t + post)
         nb = [j for j in (k - 1, k + 1) if 0 <= j < K]
         if on[tp, k] and g[tp, k] >= max(g[tp, j] for j in nb) - 1:
-            # svitici klavesa v zablesku sirsim nez jeden uhoz (5 klaves) = zare souseda, drzena
-            # nota pokracuje (Levels: takove "uhozy" zni jako nahoda, 19 %; ostatni 42 %).
-            # Na kraji klaviatury je okno kratsi nez 7 klaves -> stejny podil (6/7).
-            win = up[t, max(0, k - 3):k + 4]
-            if not (on[t - 1, k] and win.sum() >= 6 / 7 * len(win)):
-                hits.append((k, t, tp))
-            continue
-        # jen klavesa, ktera pred uhozem nesvitila - drzenou notu rozsviti i zablesk souseda.
-        # Bila hned po uhozu cerne vedle je zare te cerne noty (Levels: 59 takovych, zni jako nahoda).
-        short = [f for f in range(t + 1, tp + 1) if on[f, k] and not any(on[f, j] for j in nb)]
-        leak = not black[k] and any(black[j] and (up[max(0, t - 3):t, j] & ~up[max(0, t - 3):t, k]).any() for j in nb)
-        if short and not on[t - 1, k] and not leak:
-            hits.append((k, t, short[0]))
+            hits.append((k, t, tp))
     hits.sort()
     notes = []
     for i, (k, t, f) in enumerate(hits):
