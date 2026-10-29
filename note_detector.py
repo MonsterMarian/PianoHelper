@@ -439,7 +439,10 @@ def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float
         tp = min(n - 1, t + post)
         nb = [j for j in (k - 1, k + 1) if 0 <= j < K]
         if on[tp, k] and g[tp, k] >= max(g[tp, j] for j in nb) - 1:
-            hits.append((k, t, tp))
+            # svitici klavesa v zablesku sirsim nez jeden uhoz (5 klaves) = zare souseda, drzena
+            # nota pokracuje (Levels: takove "uhozy" zni jako nahoda, 19 %; ostatni 42 %)
+            if not (on[t - 1, k] and up[t, max(0, k - 3):k + 4].sum() >= 6):
+                hits.append((k, t, tp))
             continue
         # jen klavesa, ktera pred uhozem nesvitila - drzenou notu rozsviti i zablesk souseda.
         # Bila hned po uhozu cerne vedle je zare te cerne noty (Levels: 59 takovych, zni jako nahoda).

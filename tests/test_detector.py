@@ -201,6 +201,13 @@ def test_flash_held_note_and_neighbour():
     # takze to neni kratka nota E4 (dela to zaloha pro staccato)
     g[25, 5] = 70
     assert (64, 22, 27) not in _flash_found(g) and (64, 10, 41) in _flash_found(g)
+    # D4 a F#4 naraz vedle drzene E4: zablesk pres 7 klaves rozsviti i E4, ale E4 se nedeli
+    g = np.full((60, 12), 70.0)
+    g[10:13, 2:7] = 250
+    g[13:41, 4] = 200
+    g[22:25, 1:8] = 250
+    g[25:35, [2, 6]] = 240
+    assert _flash_found(g) == [(64, 10, 41), (62, 22, 35), (66, 22, 35)], _flash_found(g)
 
 
 def test_flash_fast_repeats_do_not_overlap():

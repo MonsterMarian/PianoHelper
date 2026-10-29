@@ -67,8 +67,10 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
   úhozem **téže** klávesy – záblesk sousední noty drženou notu neukončí (dřív ji usekl)
   a rychle opakované tóny se nepřekrývají. Krátká nota se bere jen na klávese, která před
   úhozem nesvítila (jinak by záblesk souseda rozdělil drženou notu), a ne na bílé klávese
-  1–3 snímky po úhozu černé vedle: to je záře té černé noty. Levels po opravách
-  (review 2026-10-29): 2524 → 2589 not (+65 krátkých), noty přesahující další úhoz téže
+  1–3 snímky po úhozu černé vedle: to je záře té černé noty. Klávesa, která už svítí, se
+  v záblesku širším než jeden úhoz (aspoň 6 ze 7 kláves okolo naráz) nebere jako nový úhoz:
+  rozsvítil ji soused a držená nota pokračuje. Levels po opravách (review 2026-10-29):
+  2524 → 2456 not (+65 krátkých, −133 rozdělených držených), noty přesahující další úhoz téže
   klávesy 702 → 0; všech 18 Synthesia videí beze změny počtu not.
 
   **Kontrola proti zvuku** (`audio.m4a` vedle videa): při nástupu noty se změří nárůst energie
@@ -76,7 +78,10 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
   bez nástupu. Nota „zní“, když je nad náhodou a silnější než oba půltóny vedle. Původní noty
   Levels 44 %, tytéž posunuté o půltón 13 % (o 3 půltóny 23 %), takže metrika rozlišuje, ale
   jen na úrovni skupin. Krátké noty ze zálohy: bez pravidla o záři černé 35 % (bílé 17 % =
-  úroveň falešných, černé 56 %), s ním 48 %. Bílá klávesa se měří jen
+  úroveň falešných, černé 56 %), s ním 48 %. „Úhozy“ na už svítící klávese: v záblesku přes
+  6–7 kláves 19 % (133 not, úroveň falešných), v užším 42 % – jiný znak obrazu (velikost
+  skoku, jas proti sousedům, střed záblesku) je neodděloval. Po všech opravách zní 45 % not
+  Levels (dřív 44 %). Bílá klávesa se měří jen
   v části, nad kterou nedopadají černé noty. Pozor na hranice: černá klávesa, která začíná o pixel
   vedle hranice bílé, se dřív nevyřízla a H5 pak svítilo i od noty A♯5 a obdélníku na hranici
   H5/C6 – z toho bylo 36 falešných C6. Teď se černá odřízne podle toho, na které straně středu
@@ -88,18 +93,16 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
 |---|---|---|---|---|
 | Fourth of July (UVnXmLGu4cI) | černé pozadí, popisky pod klávesami, 2 barvy | E2–D6, vzor 100 % | 734, ruce L 172 / R 557 | ~30 s / 5,5 min videa |
 | Ma Meilleure Ennemie (SFyKbYbpHkc) | obrázek na pozadí, poloprůhledná klávesnice, krátké noty s písmenem | A2–F♯6, vzor 100 % | 1138 | ~40 s / 2,5 min |
-| Avicii – Levels, Pianella (PSolYNrEiWc) | natočené piano s rukama, vinětace, záblesky | A0–C8, vzor 100 % | ≈ 2500; kontrola proti zvuku: 99 % not zní | ~1 min / 3,5 min |
+| Avicii – Levels, Pianella (PSolYNrEiWc) | natočené piano s rukama, vinětace, záblesky | A0–C8, vzor 100 % | 2456 (po review 2026-10-29); kontrola proti zvuku: 99 % not zní | ~1 min / 3,5 min |
 | syntetické (test) | známé noty | E2–D6 | 12/12, začátky ±1 snímek, ruce 12/12 | 1 s |
 
 ## Omezení
 
 - Potřebuje klávesnici ve videu, která se barví, nebo noty dopadající na linii (i u natočeného
   piana). Videa bez padajících not převádí `--audio` (basic-pitch), což je méně přesné.
-- Záblesky: krátký úhoz vedle držené noty, která svítí slaběji, ji pořád rozdělí na dvě
-  (při kontrole 0,15 s po úhozu svítí držená nota víc než zhaslý soused). Levels: 518 „nových
-  úhozů“ na už svítící klávese, ve zvuku 36 % (skutečné 44 %, falešné ~16 %) → odhadem ~30 %
-  z nich je rozdělená držená nota. Znak, který by je oddělil, jsme nenašli: úhoz noty do
-  2 kláves vedle ani záblesk souseda podíl nemění (35–36 %).
+- Záblesky: držená nota se pořád rozdělí, když ji rozsvítí úzký záblesk jediného souseda
+  (do 5 kláves) – to vypadá stejně jako její vlastní opakovaný úhoz. Levels: ze zbylých 385
+  takových úhozů zní 42 % (skutečné 44 %), takže rozdělených je odhadem jen pár procent.
 - Záblesky: dvě sousední půltónové noty naráz se poznají jako jedna; bílá klávesa mezi dvěma
   černými notami těsně po sobě občas vyjde navíc (< 1 % not). Pravidlo „bílá mezi dvěma
   hranými černými musí svítit víc než ony“ jsme zkusili a zahodili: záblesk samotné noty A
