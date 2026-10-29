@@ -20,6 +20,7 @@ const SPAN = {
   '4-5': [1, 1, 1, 2, 3, 5],
 };
 const IMPOSSIBLE = 50;
+const SAME_KEY = 2;                         // ruka stoji: stejna klavesa jinym prstem
 
 // Cena rozpeti 'span' (pultony, smer od nizsiho prstu k vyssimu) pro dvojici prstu lo < hi.
 function spanCost(lo, hi, span, { relaxed = true } = {}) {
@@ -231,6 +232,8 @@ export function fingerHand(notes, hand) {
   for (let n = 2; n < m; n++) {
     const P = events[n - 2], A = events[n - 1], B = events[n];
     const mono = P.ns.length === 1 && A.ns.length === 1 && B.ns.length === 1;
+    // ton - akord - tyz ton: ruka stoji na miste (u jednotlivych tonu meni prsty uz pravidla 4-7)
+    const same = P.ns.length === 1 && A.ns.length > 1 && B.ns.length === 1 && P.ps[0] === B.ps[0] && B.still && B.t - P.t < 1.5;
     const next = A.opts.map(() => B.opts.map(() => Infinity));
     const bk = A.opts.map(() => B.opts.map(() => 0));
     for (let i = 0; i < A.opts.length; i++) {
@@ -241,6 +244,8 @@ export function fingerHand(notes, hand) {
           if (mono && B.t - P.t < 1.5) {
             c += tripleCost(P.opts[j].fs[0], P.qs[0], A.opts[i].fs[0], A.qs[0], B.opts[k].fs[0], B.qs[0]);
           }
+          // ruka stoji: stejna klavesa ob jednu udalost = stejny prst (Levels: C#6 palcem i posledni v motivu)
+          if (same && P.opts[j].fs[0] !== B.opts[k].fs[0]) c += SAME_KEY;
           if (c < next[i][k]) { next[i][k] = c; bk[i][k] = j; }
         }
       }

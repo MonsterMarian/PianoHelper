@@ -183,6 +183,11 @@ Co jsme podle toho změnili (testy v `tests/theory.test.mjs`):
   Na začátku a konci skladby se okno 7 událostí posune dovnitř, jinak by první a poslední dvě
   události nikdy „nestály“ (Levels: první C♯6 dřív dvojkou, teď palcem). V akordu zůstává palec
   na černé 1 bod i v poloze (review 2026-10-29: omylem se zvedl na 3, 86 prstů v knihovně jinak).
+- **Tón – akord – týž tón** v poloze: tón zahraje týž prst (jinak +2). Poslední C♯6 motivu
+  v Levels dřív dostalo 2, protože za ním už nebyl akord, kvůli kterému se palec vyplatí.
+  Obecné pravidlo „stejná klávesa ob událost = stejný prst“ jsme zkusili a zahodili: měnilo
+  3 % prstů v knihovně a přidalo 70 podkladů palce. Omezené na tón–akord–tón mění 28 prstů
+  a žádná metrika auditu se nezhorší.
 - **Zbytečné křížení:** podklad / překlad, po kterém se melodie hned obrátí a všechny tři tóny
   se vejdou do 7 půltónů, stojí +2. Ve stupnici ruka pokračuje dál, tady by se jen vrátila.
 - Audit na 19 skladbách × 5 úrovních (znovu převedená knihovna, nové úrovně): „palec na černé

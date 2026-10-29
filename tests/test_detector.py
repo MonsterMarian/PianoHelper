@@ -221,6 +221,11 @@ def test_flash_short_note():
     g[13, 4] = 240
     assert _flash_found(g) == [(64, 10, 14)]
     assert _flash_found(g, min_dur=0.2) == []                       # kratsi nez min_note_duration
+    # zare cerne: kratka D#4 ve snimku 10, o 2 snimky pozdeji kratce blikne sousedni bila E4 -> neni nota
+    g = np.full((60, 12), 70.0)
+    g[10:12, 3] = 240                                               # D#4
+    g[12:14, 4] = 240                                               # E4 (zare D#4)
+    assert _flash_found(g) == [(63, 10, 12)]
 
 
 def _flash_found(g, **kw):

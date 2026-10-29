@@ -499,10 +499,9 @@ test('prstoklad: palec na cerne v akordu stoji 1 bod, v poloze 3, v melodii 5', 
   assert.equal(noteCost(1, 70), 5);
 });
 
-test('prstoklad Levels: palec na C#6 uz od prvni noty (okno na okraji skladby)', () => {
+test('prstoklad Levels: palec na C#6 od prvni do posledni noty motivu (okraje skladby)', () => {
   const a = [];
   for (let i = 0; i < 8; i++) a.push({ p: 88, s: i * 0.47, e: i * 0.47 + 0.2 }, { p: 92, s: i * 0.47, e: i * 0.47 + 0.2 }, { p: 85, s: i * 0.47 + 0.23, e: i * 0.47 + 0.43 });
   fingerHand(a, 'R');
-  // shortcut: posledni nota motivu dostane 2 (za ni uz neni akord, ke kteremu se palec hodi), resit az bude vadit
-  assert.ok(a.filter((n) => n.p === 85).slice(0, -1).every((n) => n.f === 1), a.filter((n) => n.p === 85).map((n) => n.f).join(''));
+  assert.ok(a.filter((n) => n.p === 85).every((n) => n.f === 1), a.filter((n) => n.p === 85).map((n) => n.f).join(''));
 });

@@ -66,9 +66,17 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
   kratší než `min_note_duration` se zahodí. Opakovaný akord nezhasne, proto nota končí i dalším
   úhozem **téže** klávesy – záblesk sousední noty drženou notu neukončí (dřív ji usekl)
   a rychle opakované tóny se nepřekrývají. Krátká nota se bere jen na klávese, která před
-  úhozem nesvítila (jinak by záblesk souseda rozdělil drženou notu). Levels po opravách
-  (review 2026-10-29): 2524 → 2631 not (+107 krátkých), noty přesahující další úhoz téže
-  klávesy 702 → 0; všech 18 Synthesia videí beze změny počtu not. Bílá klávesa se měří jen
+  úhozem nesvítila (jinak by záblesk souseda rozdělil drženou notu), a ne na bílé klávese
+  1–3 snímky po úhozu černé vedle: to je záře té černé noty. Levels po opravách
+  (review 2026-10-29): 2524 → 2589 not (+65 krátkých), noty přesahující další úhoz téže
+  klávesy 702 → 0; všech 18 Synthesia videí beze změny počtu not.
+
+  **Kontrola proti zvuku** (`audio.m4a` vedle videa): při nástupu noty se změří nárůst energie
+  na jejích prvních 4 harmonických a vydělí 90. percentilem téže výšky v náhodných chvílích
+  bez nástupu. Nota „zní“, když je nad náhodou a silnější než oba půltóny vedle. Původní noty
+  Levels 44 %, tytéž posunuté o půltón 13 % (o 3 půltóny 23 %), takže metrika rozlišuje, ale
+  jen na úrovni skupin. Krátké noty ze zálohy: bez pravidla o záři černé 35 % (bílé 17 % =
+  úroveň falešných, černé 56 %), s ním 48 %. Bílá klávesa se měří jen
   v části, nad kterou nedopadají černé noty. Pozor na hranice: černá klávesa, která začíná o pixel
   vedle hranice bílé, se dřív nevyřízla a H5 pak svítilo i od noty A♯5 a obdélníku na hranici
   H5/C6 – z toho bylo 36 falešných C6. Teď se černá odřízne podle toho, na které straně středu
@@ -88,7 +96,10 @@ Skutečné piano snímané shora, ruce hrají, noty padají na zářící linku 
 - Potřebuje klávesnici ve videu, která se barví, nebo noty dopadající na linii (i u natočeného
   piana). Videa bez padajících not převádí `--audio` (basic-pitch), což je méně přesné.
 - Záblesky: krátký úhoz vedle držené noty, která svítí slaběji, ji pořád rozdělí na dvě
-  (při kontrole 0,15 s po úhozu svítí držená nota víc než zhaslý soused).
+  (při kontrole 0,15 s po úhozu svítí držená nota víc než zhaslý soused). Levels: 518 „nových
+  úhozů“ na už svítící klávese, ve zvuku 36 % (skutečné 44 %, falešné ~16 %) → odhadem ~30 %
+  z nich je rozdělená držená nota. Znak, který by je oddělil, jsme nenašli: úhoz noty do
+  2 kláves vedle ani záblesk souseda podíl nemění (35–36 %).
 - Záblesky: dvě sousední půltónové noty naráz se poznají jako jedna; bílá klávesa mezi dvěma
   černými notami těsně po sobě občas vyjde navíc (< 1 % not). Pravidlo „bílá mezi dvěma
   hranými černými musí svítit víc než ony“ jsme zkusili a zahodili: záblesk samotné noty A

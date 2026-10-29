@@ -433,6 +433,7 @@ def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float
     up = np.zeros_like(g, bool)
     up[1:] = g[1:] - g[:-1] > rise
     up[1:] &= ~up[:-1]                       # zablesk trva par snimku - jen prvni
+    black = [kk.midi_note % 12 in (1, 3, 6, 8, 10) for kk in kb.keys]
     hits = []                                # (klavesa, uhoz, snimek, od ktereho nota urcite sviti)
     for t, k in zip(*np.where(up)):
         tp = min(n - 1, t + post)
@@ -440,9 +441,11 @@ def _flash_notes(g: np.ndarray, kb: KeyboardLayout, times: np.ndarray, dt: float
         if on[tp, k] and g[tp, k] >= max(g[tp, j] for j in nb) - 1:
             hits.append((k, t, tp))
             continue
-        # jen klavesa, ktera pred uhozem nesvitila - drzenou notu rozsviti i zablesk souseda
+        # jen klavesa, ktera pred uhozem nesvitila - drzenou notu rozsviti i zablesk souseda.
+        # Bila hned po uhozu cerne vedle je zare te cerne noty (Levels: 59 takovych, zni jako nahoda).
         short = [f for f in range(t + 1, tp + 1) if on[f, k] and not any(on[f, j] for j in nb)]
-        if short and not on[t - 1, k]:
+        leak = not black[k] and any(black[j] and (up[max(0, t - 3):t, j] & ~up[max(0, t - 3):t, k]).any() for j in nb)
+        if short and not on[t - 1, k] and not leak:
             hits.append((k, t, short[0]))
     hits.sort()
     notes = []
