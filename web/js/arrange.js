@@ -280,13 +280,17 @@ function advanced(notes, grid, end, { octaves }) {
     if (!ch || !ch.tones.includes(n.p % 12)) { result.push({ ...n }); continue; }
     const top = Math.min(...notes.filter((o) => o.h !== 'L' && o.s < n.e && o.e > n.s).map((o) => o.p), 84);
     const fifth = placeInRange((ch.root + 7) % 12, n.p + 1, n.p + 11, n.p + 7);
-    const pattern = [n.p, fifth, n.p + 12, fifth].map((p) => (p !== null && p < top - 2 ? p : null));
+    // oktava by narazila do melodie -> nejvyssi jiny ton akordu pod ni (C3 G3 E3 G3 misto diry)
+    let high = n.p + 12;
+    for (let p = Math.min(n.p + 11, top - 3); high >= top - 2 && p > n.p; p--) if (p !== fifth && ch.tones.includes(p % 12)) high = p;
+    const pattern = [n.p, fifth, high, fifth].map((p) => (p !== null && p < top - 2 ? p : null));
     const times = eighthsIn(beats, n.s, n.e);
-    const FINGERS = [5, 2, 1, 2];                                  // ucebnicovy rozklad leve ruky
+    const FINGERS = high > fifth ? [5, 2, 1, 2] : [5, 1, 2, 1];   // ucebnicovy rozklad leve ruky (palec nahore)
     result.push({ ...n, fixF: 5 });
     times.forEach((t, k) => {
       const p = pattern[k % 4];
-      const next = times[k + 1] ?? n.e;
+      // posledni ton rozkladu je taky cela osmina, i kdyz original pusti bas o kousek driv
+      const next = times[k + 1] ?? t + (t - times[k - 1]);
       if (p === null || k % 4 === 0) return;
       if (others.some((o) => o.p === p && o.s < next && o.e > t)) return;
       result.push({ p, s: t, e: t + (next - t) * 0.95, h: 'L', added: true, fixF: FINGERS[k % 4] });

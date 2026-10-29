@@ -35,7 +35,8 @@ Pro 3 skladby × 5 úrovní (15 souborů) se zápis načetl knihovnou `music21` 
 Po přidání 2. hlasu (2026-10-29): celá knihovna 19 skladeb × 5 úrovní (95 souborů) – každý hlas
 v každém taktu má délku taktu, počet not sedí, 982 taktů má 2. hlas; music21 na Ódě, Levels
 a Fourth of July (15 souborů): počet not i délky hlasů bez chyby. Test: držený bas pod
-rozkladem zůstane celou notou v hlase 6.
+rozkladem zůstane celou notou v hlase 6. Vizuálně (OpenSheetMusicDisplay v headless Chrome):
+Óda, Pokročilé, takty 1–4 – bas celou notou ve 2. hlase, nad ním rozklad v osminách.
 
 Vizuálně v OpenSheetMusicDisplay: Óda na radost, úroveň 2 = melodie 3 3 4 5 | 5 4 3 2 | …
 se správným rytmem (čtvrťová s tečkou + osmina + půlová), levá ruka celé noty C | G | C | G.
@@ -43,7 +44,8 @@ se správným rytmem (čtvrťová s tečkou + osmina + půlová), levá ruka cel
 ## Omezení (shortcut)
 
 - **Nejvýš dva hlasy na osnovu.** Dvě držené noty s různým začátkem přes sebe ve 2. hlase se
-  pořád zkrátí na začátek té pozdější (3. hlas by pomohl, v knihovně je to vzácné).
+  pořád zkrátí na začátek té pozdější. V knihovně 21 not z 63 239 (0,03 %), proto 3. hlas
+  nepřidáváme.
 - **Šestnáctinová mřížka.** Trioly a složené takty (6/8) se zaokrouhlí na nejbližší
   šestnáctinu. Řešení: detekce triol (dělení doby na 3) a `<time-modification>`.
 - Trámce (spojení osmin a šestnáctin) se nezapisují, dopočítá je notační program sám.

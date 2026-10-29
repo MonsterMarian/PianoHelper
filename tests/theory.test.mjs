@@ -519,3 +519,15 @@ test('MusicXML: drzeny bas pod rozkladem se nezkrati (2. hlas dolni osnovy)', as
   assert.equal(c2.length, 1, c2.join(' | '));
   assert.match(c2[0], /<duration>16<\/duration>.*<voice>6<\/voice>/);         // cela nota, 2. hlas dolni osnovy
 });
+
+test('pokrocile: oktava rozkladu by narazila do melodie -> jiny ton akordu, zadna dira', () => {
+  // C3 drzene cely takt 2x, melodie C4 v kazde dobe: oktava C4 nejde, misto ni E3
+  const notes = [];
+  for (let b = 0; b < 8; b++) {
+    notes.push({ p: 48, s: b * 2, e: b * 2 + 1.95, h: 'L' });
+    [64, 67].forEach((p) => notes.push({ p, s: b * 2, e: b * 2 + 0.45, h: 'R' }));     // C dur v prave ruce
+    [60, 60, 62, 64].forEach((p, i) => notes.push({ p, s: b * 2 + i * 0.5, e: b * 2 + i * 0.5 + 0.45, h: 'R' }));
+  }
+  const lhAdded = arrange(notes, 'advanced', grid4(40)).filter((n) => n.h === 'L' && n.added && n.s < 2);
+  assert.deepEqual(lhAdded.map((n) => n.p), [55, 52, 55, 55, 52, 55], lhAdded.map((n) => `${n.p}@${n.s}`).join(' '));
+});
